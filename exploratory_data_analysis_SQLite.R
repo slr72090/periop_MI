@@ -2,7 +2,7 @@
 ## Sylvia Ranjeva 
 
 # Set the working directory to the source file directory
-setwd("~/Desktop/MS4 research/Periop MI/code_periop_MI")
+setwd("~/Desktop/perip_MI_GITHUB")
 
 ## Load package scripts -----------------------------------------------
 require(ggplot2)
@@ -21,12 +21,26 @@ require(cowplot)
 require(corrplot)
 require(tidyverse)
 require(MASS)
+library(proto)
+library(pROC)
 select <- dplyr::select
 
+#Plotting specs
+textSize = 12
+save_plots = F
+source("plot_themes.R")
+
+#Data saving
+data_output_filename = "data_full_NA.rda"
+save_data = T
+drop_missing = F
+generate_data = F
+
+if(generate_data){
 # Identify procedures that correspond to non-cardiac surgeries
 year_vec = c(2008:2013)
 n_procedures_vec <- rep(15,length(year_vec)) #rep(15,length(year_vec)) # Number of possible procedures per individual for this year 
-n_dx_vec <- c(15, 25, 25, 15, 25, 25) # Number of possible diagnoses per individual for this year 
+n_dx_vec <- c(15, 25, 25, 25, 25, 25) # Number of possible diagnoses per individual for this year 
 source("process_data.R")
 
 data <- data_all %>% 
@@ -38,18 +52,77 @@ data <- data_all %>%
          anemia = cm_anemdef,
          PAD = cm_perivasc,
          liver_dz = cm_liver) %>% 
-  filter(valve_dz == 0) %>% 
-  select(-valve_dz) %>% 
-  mutate(`RCRI > 3` = as.factor(as.numeric(RCRI_pt) > 3),
-         age_factor = as.factor(ntile(age,3)),
+  mutate(age_factor = as.factor(ntile(age,3)),
          age = as.numeric(scale(age)),
+         nchronic = as.numeric(scale(nchronic)),
          invasive_mgmt = as.factor(invasive_mgmt),
          high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
-         hx_revasc = as.factor(prior_CABG == 1 | prior_PCI ==1))
-## Exploratory plots ## -----
+         hx_revasc = as.factor(as.numeric(prior_CABG == 1 | prior_PCI ==1))) %>% 
+  mutate(RCRI_pt = as.factor(as.numeric(RCRI_pt) + as.numeric(high_risk_surgery == 1))) %>% 
+  mutate(severe_MI = as.factor(as.numeric(cardiogenic_shock == 1 | IABP == 1))) %>% 
+  select(-c(prior_CABG, prior_PCI, prior_MI, CAD, transplant,thoracic_surgery,vascular,nchronic)) %>% 
+  mutate(`RCRI >= 3` = as.factor(as.numeric(RCRI_pt) > 3))
 
-textSize = 12
-source("plot_themes.R")
+if(save_data){
+  save(data, file = data_output_filename)
+}
+}
+
+if(!generate_data){
+  load(data_output_filename)
+}
+## Missing data ## ---------------------------------------------------------------------------------------------------------------
+dfm_missing_demog <- data %>% select(c(year, race, gender, smoking, alcoholic, high_risk_surgery)) %>% 
+  melt(., id.vars = "year") %>% 
+  group_by(year,variable) %>% 
+  summarize(Completeness = (mean(! is.na(value)) * 100),
+            n = n()) %>% 
+  mutate(var_type = "Demographic variables")
+
+dfm_missing_ASCVD_risk <- data %>% 
+  select(year, hx_chf, hx_DM, HTN, obesity, HLD, hx_ckd) %>%  
+  melt(., id.vars = "year") %>% 
+  group_by(year,variable) %>% 
+  summarize(Completeness = (mean(! is.na(value)) * 100),
+            n = n()) %>% 
+  mutate(var_type = "ASCVD risk factors")
+
+dfm_missing_ASCVD <- data %>% 
+  select(year, hx_isch_heart, PAD, valve_dz, hx_CVA) %>%  
+  melt(., id.vars = "year") %>% 
+  group_by(year,variable) %>% 
+  summarize(Completeness = (mean(! is.na(value)) * 100),
+            n = n()) %>% 
+  mutate(var_type = "Known ASCVD")
+
+dfm_missing_other_risk <- data %>% 
+  select(year, chrnlung, cm_mets, malignancy, anemia) %>%  
+  melt(., id.vars = "year") %>% 
+  group_by(year,variable) %>% 
+  summarize(Completeness = (mean(! is.na(value)) * 100),
+            n = n()) %>% 
+  mutate(var_type = "Other risk factors")
+
+df_missing_data <- rbind(dfm_missing_demog, 
+                         dfm_missing_ASCVD_risk, 
+                         dfm_missing_ASCVD, 
+                         dfm_missing_other_risk
+                         ) %>% 
+  ungroup() %>% 
+  mutate( year = as.numeric(as.character(year)))
+  
+p_missing <- ggplot(df_missing_data, aes(x = as.numeric(year), y = Completeness)) + 
+  geom_line(aes(color = variable)) + 
+  facet_wrap(~var_type) + 
+  plot_themes + 
+  ylim(50,100) + 
+  xlab("")
+
+if(save_plots){
+  save_plot("Missing_data.pdf", p_missing, base_width = 6, base_height = 6)
+}
+
+## Exploratory plots ## ---------------------------------------------------------------------------------------------------------------
 
 dfm_dat_demographic_cat <- data_all %>% select(c(year, race, gender, smoking)) %>% 
   melt(., id.vars = "year") %>% 
@@ -72,7 +145,6 @@ dfm_smoking_age <- data_all %>% select(c(year, age_factor, smoking)) %>%
   group_by(year, age_factor) %>% 
   summarize(mean = mean((as.numeric(smoking)-1)),
             sd = sd(smoking))
-
 
 p_dem_cat <- ggplot(dfm_dat_demographic_cat, aes(x = year, y = mean)) + 
   geom_point(aes(color = variable)) + 
