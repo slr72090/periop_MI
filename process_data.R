@@ -1,7 +1,6 @@
 ## Exploratory data analysis; Perioperative MI 
 ## Sylvia Ranjeva 
 
-
 ## Load package scripts -----------------------------------------------
 require(ggplot2)
 require(foreign)
@@ -87,8 +86,8 @@ for(i in c(1:length(year_vec))){
     new_txt <- paste0(" OR dx",j," LIKE '410%'")
     dx_snippet <- paste0(dx_snippet, new_txt)
   }
-  nis_query <- "SELECT * FROM data_y WHERE (pr_snippet) AND (pr_ccs_snippet) AND (dx_snippet) AND age > 45 AND elective == 1"# LIMIT 10000"
-  #
+  nis_query <- "SELECT * FROM data_y WHERE (pr_snippet) AND (pr_ccs_snippet) AND (dx_snippet) AND age > 45 AND elective == 1 LIMIT 1000"
+
   #Sub correct year and procedure codes 
   nis_query <- gsub("y", toString(year), nis_query)
   nis_query <- gsub("pr_snippet", pr_snippet, nis_query)
@@ -153,7 +152,6 @@ for(i in c(1:length(year_vec))){
   
   core_df$malignancy <- apply(core_df %>% 
                                 select(starts_with("dxccs")),
-                              #%>% select(-starts_with("dxccs")), 
                               1, 
                               pr_fun,
                               code = malig_string)
@@ -342,7 +340,7 @@ for(i in c(1:length(year_vec))){
              #cm_dm,
              #cm_dmcx,
              hx_ckd, 
-             cm_liver,
+             #cm_liver,
              #cm_renlfail,
              CAD,
              prior_MI,
@@ -352,10 +350,10 @@ for(i in c(1:length(year_vec))){
              cm_perivasc,
              cm_valve,
              hx_chf,
-             CHF_unsp,
-             CHF_sys,
-             CHF_dia,
-             CHF_com,
+             # CHF_unsp,
+             # CHF_sys,
+             # CHF_dia,
+             # CHF_com,
              hx_VTE,
              cm_chrnlung, 
              cm_alcohol,
@@ -381,7 +379,6 @@ for(i in c(1:length(year_vec))){
              IABP,
              cardiogenic_shock,
              ICF,
-             los,
              year))  
   
   if(drop_missing){
