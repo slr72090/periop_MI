@@ -32,7 +32,7 @@ save_plots = F
 source("plot_themes.R")
 
 #Data saving
-data_filename = "data_all_raw.rda"
+data_filename = "data_all_raw_2.rda"
 save_data = F
 drop_missing = F
 impute_missing = T
@@ -58,11 +58,12 @@ if(generate_data == T){
            age = as.numeric(scale(age)),
            nchronic = as.numeric(scale(nchronic)),
            invasive_mgmt = as.factor(invasive_mgmt),
-           high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
+           high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1|abdominal == 1)),
+           high_risk_surgery_2 = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
            hx_revasc = as.factor(as.numeric(prior_CABG == 1 | prior_PCI ==1))) %>% 
     mutate(RCRI_pt = as.factor(as.numeric(RCRI_pt) + as.numeric(high_risk_surgery == 1))) %>% 
     mutate(severe_MI = as.factor(as.numeric(cardiogenic_shock == 1 | IABP == 1))) %>% 
-    select(-c(prior_CABG, prior_PCI, prior_MI, CAD, transplant,thoracic_surgery,vascular,nchronic)) %>% 
+    select(-c(prior_CABG, prior_PCI, prior_MI, CAD, nchronic)) %>% #transplant,thoracic_surgery,vascular,)) %>% 
     mutate(`RCRI >= 3` = as.factor(as.numeric(RCRI_pt) > 3))
   
   if(impute_missing){
@@ -73,15 +74,13 @@ if(generate_data == T){
   data = data_formatted
   
   if(save_data){
-    save(data, file = data_filename)
+    save(data_formatted, data_all, file = data_filename)
   }
 }
-
+ 
 if(generate_data == F){
   load(data_filename)
-  source("impute_missing.R")
-  data_formatted[,missing_vars] <- complete_data[,missing_vars]
-  data <- data_formatted 
+   data <- data_formatted 
 }
 
 ## Exploratory plots ## ------------------------------------------------------------------------------------------------
@@ -161,6 +160,91 @@ out.coord$sig <- as.factor(out.coord$`dim 1` > 0.4 | out.coord$`dim 2` > 0.5 |ou
 out.contrib$max_contrib <- apply(out.contrib %>% select(-var),1,max) 
 retained_vars <- out.contrib %>% filter(max_contrib > 10) %>% select(var)
 
+#### Evaluate correlations in covariates ## ---------------------------------------------------------------------------------------------
+cor_data <- data %>% select(-c(ind, 
+                               year, 
+                               invasive_mgmt, 
+                               Afib,
+                               sepsis,
+                               PNA, 
+                               PE,
+                               DVT,
+                               Bleed,
+                               died, 
+                               ICF,
+                               severe_MI,
+                               cardiogenic_shock,
+                               IABP,
+                               RCRI_pt, 
+                               age, 
+                               `RCRI >= 3`, 
+                               cm_mets)) %>% 
+  apply(.,2,as.numeric)
+M <- cor(cor_data)
+diag(M) <- 0
+p_cor <- corrplot(M,
+                  method = "shade",
+                  type = "lower", 
+                  order = "hclust",
+                  tl.col = "black",
+                  tl.cex = .75)
+
+cor_data_acute <- data %>% select(c(age_factor, 
+                                    NSTEMI,
+                                    severe_MI,
+                                    Bleed, 
+                                    PE,
+                                    DVT,
+                                    Afib,
+                                    PNA,
+                                    sepsis)) %>% 
+  mutate(STEMI = 1- as.numeric(NSTEMI)) %>% 
+  apply(.,2,as.numeric) 
+
+M_acute <- cor(cor_data_acute)
+diag(M_acute) <- 0
+p_cor_acute <- corrplot(M_acute,
+                        method = "shade",
+                        type = "lower",
+                        diag=T,
+                        order = "hclust",
+                        tl.col = "black",
+                        tl.cex = .75)
+
+
+
+### Plot PCA output ## -----------------------------------------------------------------------------------------
+xlabel <- paste0(" Dim 1, ",round(out.eig$Proportion[1],2),"%")
+ylabel <- paste0(" Dim 2, ",round(out.eig$Proportion[3],2),"%")
+
+out.coord.sig <- out.coord %>% filter(sig ==T)
+p_loadings = ggplot()+
+  #geom_point(data = out.loadings, aes(x=`dim 1`, y= `dim 2`, colour = "#DCDCDC"))+
+  geom_segment(data = out.coord, aes(x=0,y=0,xend=`dim 1`,yend=`dim 2`), color = "grey",
+               arrow=arrow(length=unit(0.2,"cm"))) +
+  geom_text(data = out.coord.sig, aes(x=`dim 1`, y=`dim 2`, label=factor(out.coord.sig$var)), color = "black") + 
+  xlab(xlabel) + 
+  ylab(ylabel) + 
+  plot_themes
+
+if(save_plots){
+  save_plot(paste0("loadings.pdf"), p_loadings, base_width = 8, base_height = 6)
+}
+
+p_ind_RCRI <-  qplot(data = out.ind, x = `dim 1`, y = `dim 2`, colour = `RCRI >= 3`) +
+  stat_ellipse(geom = "polygon", alpha = .2, aes(fill = `RCRI >= 3`)) +
+  plot_themes
+
+p_ind_year <-  qplot(data = out.ind, x = `dim 1`, y = `dim 2`, colour = year) +
+  stat_ellipse(geom = "polygon", alpha = .2, aes(fill = year)) +
+  plot_themes
+
+if(save_plots){
+  ind_plots <- plot_grid(p_ind_RCRI, p_ind_year, ncol =2)
+  save_plot("ind_plots.pdf", ind_plots, base_width = 12, base_height = 4)
+}
+
+
 ## Logit Regression analysis ## ------------------------------------------------------------------------------
 
 sub.PCA <- data[,(colnames(data) %in% c("died", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI", unlist(retained_vars)))]
@@ -170,29 +254,10 @@ var_names_full <- c(names(X1), names(X2), "cm_mets", "PNA", "sepsis", "Afib", "P
 data_full <- data %>% select(c(year, died, invasive_mgmt, var_names_full))
 out.full <- glm(died ~., data = data_full, family = "binomial")
 
-out.RCRI <- glm(as.numeric(died) ~  age +
-               gender + 
-               race + 
-               year + 
-               #smoking + 
-               #HLD + 
-               hx_isch_heart +
-               hx_chf +
-               hx_CVA + 
-               hx_DM + 
-               hx_ckd + 
-               high_risk_surgery + 
-               invasive_mgmt + 
-               NSTEMI + 
-               severe_MI, 
-               data = data, family = "binomial")
-
 out.RCRIplus <- glm(as.numeric(died) ~  age +
                       gender + 
                       race + 
                       year + 
-                      #smoking + 
-                      #HLD + 
                       Afib + 
                       sepsis +
                       PNA + 
@@ -205,7 +270,7 @@ out.RCRIplus <- glm(as.numeric(died) ~  age +
                       hx_ckd + 
                       high_risk_surgery + 
                       invasive_mgmt +
-                      NSTEMI*Bleed + 
+                      NSTEMI + 
                       hx_isch_heart + 
                       severe_MI , 
                     data = data, family = "binomial")

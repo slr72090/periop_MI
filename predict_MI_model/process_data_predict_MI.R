@@ -60,8 +60,8 @@ pr_ccs_excluded <- c(8, # non-OR nervous system
                      95, # non-OR GI
                      111, 117, 131, # non-OR GU
                      163, # non-OR MSK
-                     174 # non-OR skin/breast,
-                     #229 #non-operative removal of foreign body
+                     174, # non-OR skin/breast,
+                     229 #non-operative removal of foreign body
 )
 
 pr_ccs_excluded_codes <- paste("(", toString(paste(pr_ccs_excluded,sep="")), ")", sep="")
@@ -74,27 +74,23 @@ for(i in c(1:length(year_vec))){
   print(year)
   
   pr_snippet <- " pr1 IN pr_codes"
-  for(j in c(2:n_procedures)){
-   new_txt <- paste0(" OR pr",j," IN pr_codes")
-   pr_snippet <- paste0(pr_snippet, new_txt)
-  }
+ # for(j in c(2:n_procedures)){
+   #new_txt <- paste0(" OR pr",j," IN pr_codes")
+  # pr_snippet <- paste0(pr_snippet, new_txt)
+ # }
   
   pr_ccs_snippet <- " prccs1 NOT IN pr_ccs_excluded"
-  
-  dx_snippet <- " dx1 LIKE '410%'"
-  for(j in c(2:n_dx)){
-    new_txt <- paste0(" OR dx",j," LIKE '410%'")
-    dx_snippet <- paste0(dx_snippet, new_txt)
-  }
-  nis_query <- "SELECT * FROM data_y WHERE (pr_snippet) AND (pr_ccs_snippet) AND (dx_snippet) AND age > 45 AND elective == 1 LIMIT 1000"
 
+  nis_query <- "SELECT * FROM data_y WHERE (pr_snippet) AND (pr_ccs_snippet) AND age > 45 AND elective == 1"
+
+  #AND (dx_snippet) 
   #Sub correct year and procedure codes 
   nis_query <- gsub("y", toString(year), nis_query)
   nis_query <- gsub("pr_snippet", pr_snippet, nis_query)
   nis_query <- gsub("pr_codes", pr_codes, nis_query)
   nis_query <- gsub("pr_ccs_snippet", pr_ccs_snippet, nis_query)
   nis_query <- gsub("pr_ccs_excluded", pr_ccs_excluded_codes, nis_query)
-  nis_query <- gsub("dx_snippet", dx_snippet, nis_query)
+  #nis_query <- gsub("dx_snippet", dx_snippet, nis_query)
   
   # Perform the query
   db <- dbConnect(RSQLite::SQLite(), "NIS.db") 
@@ -110,9 +106,6 @@ for(i in c(1:length(year_vec))){
   dbDisconnect(db)
   time_elapsed = t2 - t
   print(time_elapsed)
-  
-  # test_dx <- core_df %>% select(starts_with("dx")) %>% 
-  #select(-starts_with("dxccs"))
   
   ## ASCVD risk factors ## --------------------------------------------------------------------------
   
@@ -141,13 +134,8 @@ for(i in c(1:length(year_vec))){
                        dx_fun,
                        string =  "24900|25000|25001|V5391|V6546|24901|24910|24911|24920|24921|24930|24931|24940|24941|24950|24951|24960|24961|24970|24971|24980|24981|24990|24991|^250"
   )
-  # Malignancy
- # malig_string <- c("588")
- # for(n in c(140:172,174:195,200:208)){
-  # malig_string <- c(malig_string, paste0("|",n))
- # }
   
-  #malig_string <- c(588,140:172,174:195,200:208)
+ ## Malignancy
   malig_string <- c(11:42)
   
   core_df$malignancy <- apply(core_df %>% 
@@ -230,12 +218,35 @@ for(i in c(1:length(year_vec))){
   core_df$transplant <- apply(core_df %>% select(starts_with("prccs")), 
                               1, 
                               pr_fun,
-                              code = c(105,176))
+                              code = c(176))
+  
+  core_df$abdominal <- apply(core_df %>% select(starts_with("prccs")), 
+                             1, 
+                             pr_fun,
+                             code = c(71:75,89))##80,84,89))#,90))
   
   core_df$vascular <- apply(core_df %>% select(starts_with("prccs")), 
                             1, 
                             pr_fun,
-                            code = c(54:56))
+                            code = c(51,52,56))
+  
+  #core_df$vascular <- apply(core_df %>% select(starts_with("pr")) %>% select(-starts_with("prccs")), 
+                          # 1, 
+                          # dx_fun,  
+                          # string = paste(c("^",paste(as.character(paste0(380,c(1:2,4:7))), collapse = "|^"),
+                           #           "|^",paste(as.character(paste0(381,c(1:2,4:6))), collapse = "|^"),
+                           #           "|^",paste(as.character(paste0(383,c(1:2,4:7))), collapse = "|^"),
+                           #           "|^",paste(as.character(paste0(386,c(1:2,4:7))), collapse = "|^")),
+                            #          "|^",paste(as.character(paste0(397,c(1,3,8))), collapse = "|^"), collapse = "")
+  #)
+                           
+  ## ICD9 codes:
+  # 3801 - 3802, 3804-3807: Incision of vessels (not upper or lower limb)
+  # 3811 - 3812, 3814-3816: End-arterectomy
+  # 3831 - 3837: Vessel resection with anastamosis
+  # 3841 - 3842, 3844-3847: Resection with replacement
+  # 3861 - 3862, 3864-3867: Other excision of vessel 
+  
   
   core_df$invasive_mgmt <- apply(core_df %>% select(starts_with("prccs")), 
                                  1, 
@@ -283,6 +294,11 @@ for(i in c(1:length(year_vec))){
   ##  Outcomes ## ---------------------------------------------------------------------
   
   ## NSTEMI vs STEMI 
+  core_df$MI <- apply(core_df %>% select(starts_with("dx")), 
+                          1, 
+                          dx_fun,  
+                          string = "^410")
+  
   core_df$NSTEMI <- apply(core_df %>% select(starts_with("dx")), 
                                    1, 
                                    dx_fun,  
@@ -365,6 +381,7 @@ for(i in c(1:length(year_vec))){
              thoracic_surgery,
              transplant,
              vascular, 
+             abdominal,
              RCRI_pt,
              #Ischemic_stroke,
              Afib,
@@ -375,6 +392,7 @@ for(i in c(1:length(year_vec))){
              Bleed,
              NSTEMI,
              died,
+             MI,
              invasive_mgmt,
              IABP,
              cardiogenic_shock,

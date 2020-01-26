@@ -1,0 +1,18 @@
+% latex table generated in R 3.5.3 by xtable 1.8-4 package
+% Fri Jan 24 21:49:29 2020
+\begin{table}[ht]
+\centering
+\begin{tabular}{rlll}
+  \hline
+ & year & n & percent \\ 
+  \hline
+1 & 2008 & 424 & 0.139198949441891 \\ 
+  2 & 2009 & 344 & 0.116887529731566 \\ 
+  3 & 2010 & 351 & 0.125671321160043 \\ 
+  4 & 2011 & 387 & 0.127260769483722 \\ 
+  5 & 2012 & 289 & 0.114093959731544 \\ 
+  6 & 2013 & 279 & 0.11053882725832 \\ 
+  Total & Aggregate & 2074 & 0.122867298578199 \\ 
+   \hline
+\end{tabular}
+\end{table}

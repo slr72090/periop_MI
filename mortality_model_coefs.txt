@@ -1,0 +1,37 @@
+% latex table generated in R 3.5.3 by xtable 1.8-4 package
+% Tue Jan 14 18:58:46 2020
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrr}
+  \hline
+ & OR & 2.5\% CI & 97.5\% CI \\ 
+  \hline
+(Intercept) & 0.31 & 0.26 & 0.37 \\ 
+  age & 1.69 & 1.59 & 1.80 \\ 
+  gender1 & 1.14 & 1.01 & 1.29 \\ 
+  race1 & 1.35 & 1.09 & 1.67 \\ 
+  year2009 & 0.88 & 0.73 & 1.07 \\ 
+  year2010 & 0.90 & 0.75 & 1.09 \\ 
+  year2011 & 0.97 & 0.80 & 1.17 \\ 
+  year2012 & 0.89 & 0.73 & 1.09 \\ 
+  year2013 & 0.97 & 0.79 & 1.18 \\ 
+  Afib1 & 1.11 & 0.97 & 1.28 \\ 
+  sepsis1 & 7.31 & 6.29 & 8.51 \\ 
+  PNA1 & 1.59 & 1.35 & 1.87 \\ 
+  PE1 & 3.10 & 2.31 & 4.15 \\ 
+  DVT1 & 1.35 & 0.98 & 1.86 \\ 
+  Bleed1 & 0.92 & 0.72 & 1.18 \\ 
+  hx\_chf1 & 1.08 & 0.95 & 1.23 \\ 
+  hx\_CVA1 & 1.58 & 1.10 & 2.24 \\ 
+  hx\_DM1 & 0.94 & 0.82 & 1.06 \\ 
+  hx\_ckd1 & 1.42 & 1.24 & 1.63 \\ 
+  high\_risk\_surgery1 & 2.01 & 1.73 & 2.34 \\ 
+  invasive\_mgmt1 & 0.39 & 0.32 & 0.47 \\ 
+  NSTEMI1 & 0.33 & 0.29 & 0.38 \\ 
+  hx\_isch\_heart1 & 0.54 & 0.48 & 0.61 \\ 
+  severe\_MI1 & 6.12 & 5.10 & 7.34 \\ 
+  ICF1 & 0.00 & 0.00 & 0.00 \\ 
+  Bleed1:NSTEMI1 & 1.00 & 0.74 & 1.34 \\ 
+   \hline
+\end{tabular}
+\end{table}

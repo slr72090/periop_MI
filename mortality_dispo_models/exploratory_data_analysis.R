@@ -82,6 +82,49 @@ if(generate_data == F){
   data <- data_formatted 
 }
 
+
+## Make table 1 ## -----------------------------------------
+
+## Mortality statistics ## ---------------------------------------
+n_died <- data %>% group_by(year) %>% 
+  drop_na() %>% 
+  summarize(n = sum(died),
+            percent = mean(died)) %>% 
+  mutate(year = as.character(year))
+n_died["Total",] = c("Aggregate", sum(data$died, na.rm=T),mean(data$died, na.rm=T))
+
+dat_by_mortality <- 
+  data %>% select(-c(contains("RCRI"), ICF, year,age,ind))  %>% 
+  mutate_if(is.factor, as.character) %>% 
+  mutate_if(is.character, as.numeric) %>% 
+  drop_na() %>% 
+  group_by(died) %>% 
+  summarise_all(.,list(~mean(.))) %>% 
+  select(-died) %>% 
+  t() %>% 
+  as.data.frame()
+
+names(dat_by_mortality) <- c("Survived", "Died")
+dat_by_mortality$chisq.pval <- NA #array(NA,nrow(dat_by_mortality))
+for(i in c(1:nrow(dat_by_mortality))){
+  name <- rownames(dat_by_mortality[i,])
+  dat_sub <- data %>% select(c(died,name)) %>% 
+    mutate_if(is.factor, as.character) %>% 
+    mutate_if(is.character, as.numeric) %>% 
+    drop_na()
+  dat_by_mortality[i,]$chisq.pval <- chisq.test(table(dat_sub))$p.value
+}
+  
+dat_by_mortality <- dat_by_mortality %>% 
+  apply(.,2, round,3)
+
+if(output_tables){
+  n_died_tab <- xtable(n_died)
+  dat_by_mortality_tab <- xtable(dat_by_mortality)
+  print(n_died_tab, file="n_died.txt")
+  p
+}
+
 ## Characterize Missing data ## ---------------------------------------------------------------------------------------------------------------
 dfm_missing_demog <- data %>% select(c(year, race, gender, smoking, alcoholic, high_risk_surgery)) %>% 
   melt(., id.vars = "year") %>% 
