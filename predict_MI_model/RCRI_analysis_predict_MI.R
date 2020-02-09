@@ -2,7 +2,7 @@
 ## Sylvia Ranjeva 
 
 # Set the working directory to the source file directory
-setwd("~/Desktop/perip_MI_GITHUB")
+setwd("~/Desktop/perip_MI_GITHUB/predict_MI_model")
 
 ## Load package scripts -----------------------------------------------
 require(ggplot2)
@@ -29,10 +29,11 @@ select <- dplyr::select
 #Plotting specs
 textSize = 12
 save_plots = F
-source("plot_themes.R")
+source("../utility_scripts/plot_themes.R")
 
 #Data saving
-data_filename = "./predict_MI_model/data_predict_MI_imputed.rda" 
+dbfilename = "../data_files/NIS.db"
+data_filename = "./old_data_files/data_predict_MI_imputed.rda"
 save_data = F
 drop_missing = F
 impute_missing = T
@@ -47,6 +48,7 @@ if(generate_data == T){
   n_procedures_vec <- rep(15,length(year_vec)) #rep(15,length(year_vec)) # Number of possible procedures per individual for this year 
   n_dx_vec <- c(15, 25, 25, 25, 25, 25) # Number of possible diagnoses per individual for this year 
   source("process_data_predict_MI.R")
+  save(data_all, file = "data_predict_MI_raw_all.rda")
   
   data_formatted <- data_all %>% 
     rename(obesity = cm_obese,
@@ -57,8 +59,7 @@ if(generate_data == T){
            anemia = cm_anemdef,
            PAD = cm_perivasc) %>% 
     mutate(age_factor = as.factor(ntile(age,3)),
-           age = as.numeric(scale(age)),
-           nchronic = as.numeric(scale(nchronic)),
+           age_scaled = as.numeric(scale(age)),
            invasive_mgmt = as.factor(invasive_mgmt),
            high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1|abdominal == 1)),
            high_risk_surgery_2 = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
@@ -67,17 +68,16 @@ if(generate_data == T){
     mutate(severe_MI = as.factor(as.numeric(cardiogenic_shock == 1 | IABP == 1))) %>% 
     select(-c(prior_CABG, prior_PCI, prior_MI, CAD, nchronic)) %>% #transplant,thoracic_surgery,vascular,)) %>% 
     mutate(`RCRI >= 3` = as.factor(as.numeric(RCRI_pt) > 3))
-  
+  impute_missing = T
   if(impute_missing){
     source("impute_missing.R")
     data_formatted[,missing_vars] <- complete_data[,missing_vars]
   }
   
   data = data_formatted
-  
+  save_data = T
   if(save_data){
-    save(data_formatted, file = "data_predict_MI_imputed.rda")
-    save(data_all, file = "data_predict_MI_raw.rda")
+    save(data_formatted, file = "data_predict_MI_imputed_all.rda")
   }
 }
  
@@ -130,7 +130,7 @@ if(generate_PCA){
   save(res.pcamix, split.data, X1, X2, file = "PCA_output_full_predict_MI.rda")
 }
 if(!generate_PCA){
-  
+  load("PCA_output_full_predict_MI.rda")
 }
 
 out.eig <- as.data.frame(res.pcamix$eig) 
@@ -151,7 +151,7 @@ out.coord <- as.data.frame(rbind(res.pcamix$quanti.cor, res.pcamix$categ.coord))
 out.coord$var <- rownames(out.coord)
 out.loadings <- res.pcamix$sqload
 
-out.coord$sig <- as.factor(out.coord$`dim 1` > 0.4 | out.coord$`dim 2` > 0.5 |out.coord$`dim 1` < -0.4 | out.coord$`dim 2` < -0.5 )
+out.coord$sig <- as.factor(out.coord$`dim 1` > 0.3 | out.coord$`dim 2` > 0.3 |out.coord$`dim 1` < -0.3 | out.coord$`dim 2` < -0.3 )
 
 ## Feature selection -------------------------------------------------------------------------------------------
 
@@ -173,7 +173,7 @@ p_loadings = ggplot()+
   plot_themes
 
 if(save_plots){
-  save_plot(paste0("loadings.pdf"), p_loadings, base_width = 8, base_height = 6)
+  save_plot(paste0("PCA_loadings.pdf"), p_loadings, base_width = 8, base_height = 6)
 }
 
 out.ind.plot <- out.ind %>% 
@@ -183,16 +183,13 @@ p_ind_RCRI <-  qplot(data = out.ind.plot, x = `dim 1`, y = `dim 2`, colour = `RC
   stat_ellipse(geom = "polygon", alpha = .2, aes(fill = `RCRI >= 3`)) +
   plot_themes
 
-p_ind_RCRI <-  ggplot(data = out.ind.plot, aes(x = `dim 1`, y = `dim 2`, colour = `RCRI >= 3`)) +
-  stat_ellipse(geom = "polygon", alpha = .2, aes(fill = `RCRI >= 3`)) +
-  plot_themes
 
 p_ind_MI <-  ggplot(data = out.ind.plot, aes(x = `dim 1`, y = `dim 2`, colour = MI)) +
   stat_ellipse(geom = "polygon", alpha = .2, aes(fill = MI)) +
   plot_themes
 
-p_ind_MI <-  qplot(data = out.ind.plot, x = `dim 1`, y = `dim 2`, colour = MI) +
-  stat_ellipse(geom = "polygon", alpha = .2, aes(fill = MI)) +
+p_ind_MI <-  qplot(data = out.ind.plot, x = `dim 1`, y = `dim 2`, colour = as.factor(MI)) +
+  stat_ellipse(geom = "polygon", alpha = .2, aes(fill = as.factor(MI))) +
   plot_themes
 
 
@@ -200,7 +197,7 @@ p_ind_MI <-  qplot(data = out.ind.plot, x = `dim 1`, y = `dim 2`, colour = MI) +
 #   stat_ellipse(geom = "polygon", alpha = .2, aes(fill = year)) +
 #   plot_themes
 
-p_ind_year <-  ggplot(data = out.ind.plot, aes( x = `dim 1`, y = `dim 2`, colour = year)) +
+  p_ind_year <-  qplot(data = out.ind.plot, x = `dim 1`, y = `dim 2`, colour = year) +
   stat_ellipse(geom = "polygon", alpha = .2, aes(fill = year)) +
   plot_themes
 
@@ -218,7 +215,7 @@ out.PCA <- glm(as.numeric(MI) ~., data = sub.PCA, family = "binomial")
 var_names_full <- c(names(X1), names(X2), "Afib")
                     #"PNA", "sepsis", "Afib", "PE", "DVT", "Bleed","cm_mets")
 data_full <- data %>% select(c(year, MI, var_names_full))
-out.full <- glm(MI ~., data = data_full, family = "binomial")
+out.full <- glm(MI ~., data = data_full %>% drop_na(), family = "binomial")
 
 out.RCRIplus <- glm(as.numeric(MI) ~  age +
                       gender + 
@@ -244,10 +241,11 @@ model_comp <- data.frame(model = c("Full", "PCA", "RCRIPlus"),
   mutate(delta = BIC - min(BIC))
 
 if(save_models){
-  save(out.full, out.PCA, out.RCRIplus, file = "models_predict_MI.rda")
+  save(out.full,out.PCA, out.RCRIplus, file = "models_predict_MI.rda")
 }
 
-mod_coefs <- data.frame(apply(exp(cbind(OR = coef(out.full), confint(out.full))),2,round,2))
+confidence_intervals =  confint.default(out.full, adjust = "bonferroni")
+mod_coefs <- data.frame(apply(exp(cbind(OR = coef(out.full),confidence_intervals)),2,round,2))
 names(mod_coefs)<- c("OR", "2.5% CI", "97.5% CI")
 if(output_tables){
   tab_coefs <- xtable(mod_coefs)
@@ -264,38 +262,29 @@ test <- data[-sample,]
 
 library(pROC)
 
-out.RCRIplus.train <- glm(as.numeric(died) ~ age +
+out.RCRIplus.train <- glm(as.numeric(MI) ~ age +
                             gender + 
                             race + 
-                            year + 
-                            #smoking + 
-                            #HLD + 
-                            Afib + 
-                            sepsis +
-                            PNA + 
-                            PE + 
-                            DVT + 
-                            Bleed + 
-                            hx_isch_heart +
-                            PAD + 
-                            hx_chf +
-                            hx_CVA + 
-                            hx_DM + 
-                            hx_ckd + 
-                            high_risk_surgery + 
-                            invasive_mgmt +
-                            NSTEMI + 
-                            severe_MI, 
+                            year +  
+                           Afib +
+                           hx_isch_heart +
+                           hx_revasc +
+                           PAD +
+                           hx_chf +
+                           hx_CVA +
+                           hx_DM +
+                           hx_ckd +
+                           high_risk_surgery,
                           data = train, 
                           family = "binomial")
 
-out.full.train <- glm(died ~., data = (train %>% select(c(year, died, invasive_mgmt, severe_MI, var_names_full))), family = "binomial")
+out.full.train <- glm(as.numeric(MI) ~., data = (train %>% select(c(year, as.numeric(MI), var_names_full))), family = "binomial")
 
-test_prob_RCRIplus = predict(out.RCRIplus, newdata = test, type = "response")
-test_roc_RCRIplus = roc(test$died ~ test_prob_RCRIplus, plot = TRUE, print.auc = TRUE)
+test_prob_RCRIplus = predict(out.RCRIplus.train, newdata = test, type = "response")
+test_roc_RCRIplus = roc(test$MI ~ test_prob_RCRIplus, plot = TRUE, print.auc = TRUE)
 
-test_prob_full = predict(out.full, newdata = test, type = "response")
-test_roc_full = roc(test$died ~ test_prob_full, plot = TRUE, print.auc = TRUE)
+test_prob_full = predict(out.full.train, newdata = test, type = "response")
+test_roc_full = roc(test$MI ~ test_prob_full, plot = TRUE, print.auc = TRUE)
 
 roc.test(test_roc_full, test_roc_RCRIplus)
 p_roc <- ggroc(list(`Full model` = test_roc_full, `RCRI model` = test_roc_RCRIplus), linetype = 2) +
@@ -304,7 +293,7 @@ p_roc <- ggroc(list(`Full model` = test_roc_full, `RCRI model` = test_roc_RCRIpl
   ggtitle("ROC curves")
 
 if(save_plots){
-  save_plot("ROC_curves_mortality.pdf", p_roc, base_width = 8, base_height = 4)
+  save_plot("ROC_curves_MI.pdf", p_roc, base_width = 8, base_height = 4)
 }
 
 ## Examining discharge outcomes 

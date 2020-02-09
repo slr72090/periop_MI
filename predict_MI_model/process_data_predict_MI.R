@@ -34,9 +34,20 @@ pr_fun <- function(code, x){
   }
 }
 
+pr_class_fun <- function(x,code_df){
+  if(x %in% code_df$code){
+    pr_type <- code_df %>% filter(code == x) %>% 
+      select(type) %>% 
+      unlist()
+  }
+  if(!(x %in% code_df$code)){
+    pr_type = NA
+  }
+  return(as.character(pr_type))
+}
 # Query the database to obtain the relevant dataframe ## ------------------------------------------------------------------------
 
-pr_mapping <- read.csv("./data_files/pc2015.csv") %>% 
+pr_mapping <- read.csv(".././data_files/pc2015.csv") %>% 
   as.data.frame()
 names(pr_mapping) <- c("ICD9", "cat")
 
@@ -93,7 +104,7 @@ for(i in c(1:length(year_vec))){
   #nis_query <- gsub("dx_snippet", dx_snippet, nis_query)
   
   # Perform the query
-  db <- dbConnect(RSQLite::SQLite(), "NIS.db") 
+  db <- dbConnect(RSQLite::SQLite(), dbfilename) 
   q <- RSQLite::dbSendQuery(db, nis_query)
   # Get the data
   t <- Sys.time()
@@ -106,6 +117,29 @@ for(i in c(1:length(year_vec))){
   dbDisconnect(db)
   time_elapsed = t2 - t
   print(time_elapsed)
+  
+  ## Define procedure type ## --------------------------------------
+  pr_list <- list(c(1:9),c(10:12),
+                            c(13:21), 
+                            c(22:35), 
+                            c(36:42),
+                            c(43:50, 62:63),
+                            c(51:61),
+                            c(66:99), 
+                            c(100:118),
+                            c(119:125,129:132),
+                            c(126:128, 133:141),
+                            c(142:164),
+                            c(165:167),
+                            c(168:175),
+                            176)
+  names(pr_list) = c("Neuro", "Endo","Optho","ENT","Thoracic","Cardiac","Vascular","General","GU", "Gynecologic", "Obstetric", "Orthopedic","Breast","Skin/burn", "Transplant")
+  
+  pr_df <- stack(pr_list) %>% 
+    as.data.frame() %>% 
+    stats::setNames(c("code","type"))
+  
+  #core_df$surgery_type <- sapply(as.numeric(core_df$prccs1), pr_class_fun, code_df = pr_df)
   
   ## ASCVD risk factors ## --------------------------------------------------------------------------
   
@@ -338,7 +372,7 @@ for(i in c(1:length(year_vec))){
       nchronic = as.numeric(nchronic), # of chronic diagnoses
       died = as.numeric(died), # died during hospital admission
       los = as.numeric(los), # length of stay 
-      race = as.integer(race == 2), # binary race variable: non-hispanic african american 
+      #race = as.integer(race == 2), # binary race variable: non-hispanic african american 
       gender = as.integer(female == 0),
       malignancy = as.integer(malignancy)
       ) %>% # male gender 
@@ -347,17 +381,13 @@ for(i in c(1:length(year_vec))){
              race, 
              gender,
              nchronic,
-             cm_obese,
              smoking,
-             cm_alcohol, 
+             cm_alcohol,
+             cm_obese,
              cm_htn_c, 
              HLD,
              hx_DM, 
-             #cm_dm,
-             #cm_dmcx,
              hx_ckd, 
-             #cm_liver,
-             #cm_renlfail,
              CAD,
              prior_MI,
              hx_isch_heart,
@@ -366,43 +396,38 @@ for(i in c(1:length(year_vec))){
              cm_perivasc,
              cm_valve,
              hx_chf,
-             # CHF_unsp,
-             # CHF_sys,
-             # CHF_dia,
-             # CHF_com,
              hx_VTE,
              cm_chrnlung, 
-             cm_alcohol,
-             malignancy,
              cm_anemdef,
              malignancy,
              cm_mets,
              hx_CVA, 
+             #surgery_type,
              thoracic_surgery,
              transplant,
              vascular, 
              abdominal,
              RCRI_pt,
-             #Ischemic_stroke,
              Afib,
              sepsis,
              PNA,
              PE,
              DVT,
              Bleed,
+             MI,
              NSTEMI,
              died,
-             MI,
              invasive_mgmt,
              IABP,
              cardiogenic_shock,
              ICF,
-             year))  
+             year,
+             prccs1))  
   
   if(drop_missing){
     data <- data %>% 
     drop_na()
-  }## For now, remove missing data for analyses
+  }
   data_all <- rbind(data_all, data)
 }
 

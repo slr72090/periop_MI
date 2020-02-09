@@ -2,7 +2,7 @@
 ## Sylvia Ranjeva 
 
 # Set the working directory to the source file directory
-setwd("~/Desktop/perip_MI_GITHUB/mortality_dispo_models")
+setwd("~/Desktop/perip_MI_GITHUB/predict_MI_model")
 
 ## Load package scripts -----------------------------------------------
 require(ggplot2)
@@ -22,7 +22,6 @@ require(corrplot)
 require(tidyverse)
 require(MASS)
 library(proto)
-library(pROC)
 select <- dplyr::select
 
 #Plotting specs
@@ -31,7 +30,8 @@ save_plots = F
 source("../utility_scripts/plot_themes.R")
 
 #Data saving
-data_filename = "data_with_NA.rda"
+dbfilename = "../data_files/NIS.db"
+data_filename = "data_raw_with_surgery_type.rda"
 save_data = F
 drop_missing = F
 impute_missing = T
@@ -54,18 +54,17 @@ if(generate_data == T){
            anemia = cm_anemdef,
            PAD = cm_perivasc) %>% 
     mutate(age_factor = as.factor(ntile(age,3)),
-           age = as.numeric(scale(age)),
-           nchronic = as.numeric(scale(nchronic)),
-           invasive_mgmt = as.factor(invasive_mgmt),
+           #age = as.numeric(scale(age)),
+           #nchronic = as.numeric(scale(nchronic)),
+           #invasive_mgmt = as.factor(invasive_mgmt),
            high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1|abdominal ==1)),
-           high_risk_surgery_2 = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
            hx_revasc = as.factor(as.numeric(prior_CABG == 1 | prior_PCI ==1))) %>% 
     mutate(RCRI_pt = as.factor(as.numeric(RCRI_pt) + as.numeric(high_risk_surgery == 1))) %>% 
-    mutate(severe_MI = as.factor(as.numeric(cardiogenic_shock == 1 | IABP == 1))) %>% 
     select(-c(prior_CABG, prior_PCI, prior_MI, CAD, transplant,thoracic_surgery,vascular,nchronic)) %>% 
     mutate(`RCRI >= 3` = as.factor(as.numeric(RCRI_pt) > 3))
   
-  save(data_formatted, file = "data_with_NA.rda")
+  data <- data %>% rename(high_risk_surgery_2 = high_risk_surgery) %>% 
+    mutate(high_risk_surgery = as.factor(as.numeric(high_risk_surgery_2 == 1|abdominal ==1)))
   
   if(impute_missing){
     source("impute_missing.R")
@@ -80,63 +79,120 @@ if(generate_data == T){
 }
 if(generate_data == F){
   load(data_filename)
-  data <- data_formatted 
+   
+  data_formatted <- data %>% 
+    rename(obesity = cm_obese,
+           alcoholic = cm_alcohol,
+           HTN = cm_htn_c,
+           valve_dz = cm_valve,
+           chrnlung = cm_chrnlung,
+           anemia = cm_anemdef,
+           PAD = cm_perivasc) %>% 
+    mutate(age_factor = as.factor(ntile(age,3)),
+           #age = as.numeric(scale(age)),
+           #nchronic = as.numeric(scale(nchronic)),
+           #invasive_mgmt = as.factor(invasive_mgmt),
+           high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
+           hx_revasc = as.factor(as.numeric(prior_CABG == 1 | prior_PCI ==1))) %>% 
+    mutate(RCRI_pt = as.factor(as.numeric(RCRI_pt) + as.numeric(high_risk_surgery == 1))) %>% 
+    select(-c(prior_CABG, prior_PCI, prior_MI, CAD, transplant,thoracic_surgery,vascular,nchronic)) %>% 
+    mutate(`RCRI >= 3` = as.factor(as.numeric(RCRI_pt) > 3))
+  
+  data <- data_formatted %>% 
+    mutate(MI = as.numeric(MI==1))
+  rm(data_formatted)
+  rm(data_all)
 }
+# 
+# 
+# ## Determine surgery type ## -----------------------------------------
+# pr_list <- list(c(1:9),c(10:12),
+#                 c(13:21), 
+#                 c(22:35), 
+#                 c(36:42),
+#                 c(43:50, 62:63),
+#                 c(51:61),
+#                 c(66:99), 
+#                 c(100:118),
+#                 c(119:125,129:132),
+#                 c(126:128, 133:141),
+#                 c(142:164),
+#                 c(165:167),
+#                 c(168:175),
+#                 176)
+# names(pr_list) = c("Neuro", "Endo","Optho","ENT","Thoracic","Cardiac","Vascular","General","GU", "Gynecologic", "Obstetric", "Orthopedic","Breast","Skin/burn", "Transplant")
+# 
+# pr_df <- stack(pr_list) %>% 
+#   as.data.frame() %>% 
+#   stats::setNames(c("code","type"))
+# 
+# data$surgery_type <- sapply(as.numeric(core_df$prccs1), pr_class_fun, code_df = pr_df)
 
-
-## Make table 1 ## -----------------------------------------
-
-## Mortality statistics ## ---------------------------------------
-n_died <- data %>% group_by(year) %>% 
+## MI statistics ## ---------------------------------------
+n_MI <- data %>% group_by(year) %>% 
   drop_na() %>% 
-  summarize(n = sum(died),
-            percent = mean(died)) %>% 
+  summarize(n = sum(MI),
+            percent = mean(MI)) %>% 
   mutate(year = as.character(year)) %>% 
-  mutate(lab = paste0("n = ",n))
+    mutate(lab = paste0("n = ",n))
 
-p_died <- ggplot(n_died, aes(x= as.numeric(year), y = percent)) +
+p_MI <- ggplot(n_MI, aes(x= as.numeric(year), y = percent)) +
   geom_point() + 
   geom_line(linetype = 2) + 
   plot_themes + 
-  ylim(0,0.2) + geom_text(aes(label = lab, vjust = -1.5)) +
-  xlab("") + ylab("Yearly mortality")
+  ylim(0,0.01) + geom_text(aes(label = lab, vjust = -1.5)) +
+  xlab("") + ylab("Yearly incidence of AMI")
 
 if(save_plots){
-  save_plot("n_died.pdf", p_died, base_width =8 , base_height = 4 )
+  save_plot("n_MI.pdf", p_MI, base_width =8 , base_height = 4 )
 }
 
+n_MI["Total",] = c("Aggregate", sum(data$MI, na.rm=T),mean(data$MI, na.rm=T), paste0("n = ", sum(data$MI, na.rm=T)))
 
-n_died["Total",] = c("Aggregate", sum(data$died, na.rm=T),mean(data$died, na.rm=T))
 
-dat_by_mortality <- 
-  data %>% select(-c(contains("RCRI"), ICF, year,age,ind))  %>% 
+dat_by_MI <- 
+  data %>% select(-c(contains("RCRI"), died, ICF, year,age,ind, sepsis, PNA, PE, DVT, Bleed, NSTEMI, died, invasive_mgmt, IABP, cardiogenic_shock, ICF, age_factor, surgery_type, high_risk_surgery_2,prccs1))  %>%
   mutate_if(is.factor, as.character) %>% 
   mutate_if(is.character, as.numeric) %>% 
   drop_na() %>% 
-  group_by(died) %>% 
+  group_by(MI) %>% 
   summarise_all(.,list(~mean(.))) %>% 
-  select(-died) %>% 
+  select(-MI) %>% 
   t() %>% 
   as.data.frame()
 
-names(dat_by_mortality) <- c("Survived", "Died")
-dat_by_mortality$chisq.pval <- NA #array(NA,nrow(dat_by_mortality))
-for(i in c(1:nrow(dat_by_mortality))){
-  name <- rownames(dat_by_mortality[i,])
-  dat_sub <- data %>% select(c(died,name)) %>% 
+dat_surg_type <- data %>% 
+  filter(MI ==1 ) %>% 
+  filter(!is.na(surgery_type) &!is.na(died)) %>% 
+  group_by(died,as.factor(surgery_type)) %>% 
+  summarise(n=n())%>% 
+  ungroup() %>% 
+  as.data.frame() %>% 
+  group_by(died) %>% 
+  mutate(prop = round(n/sum(n),3)) %>% 
+  as.data.frame()
+  
+
+names(dat_by_MI) <- c("no MI", "MI")
+dat_by_MI$chisq.pval <- NA #array(NA,nrow(dat_by_mortality))
+for(i in c(1:nrow(dat_by_MI))){
+  print(i)
+  name <- rownames(dat_by_MI[i,])
+  dat_sub <- data %>% select(c(MI,name)) %>% 
     mutate_if(is.factor, as.character) %>% 
     mutate_if(is.character, as.numeric) %>% 
     drop_na()
-  dat_by_mortality[i,]$chisq.pval <- chisq.test(table(dat_sub))$p.value
+  dat_by_MI[i,]$chisq.pval <- chisq.test(table(dat_sub))$p.value
 }
   
-dat_by_mortality <- dat_by_mortality %>% 
+dat_by_MI <- dat_by_MI%>% 
   apply(.,2, round,4)
 
 if(output_tables){
-  n_died_tab <- xtable(n_died)
-  dat_by_mortality_tab <- xtable(dat_by_mortality)
-  print(n_died_tab, file="n_died.txt")
+  n_MI_tab <- xtable(n_MI)
+  dat_by_MI_tab <- xtable(dat_by_MI)
+  print(n_MI_tab, file="n_MI.txt")
+  print(dat_by_MI_tab, file="dat_by_MI.txt")
 }
 
 ## Characterize Missing data ## ---------------------------------------------------------------------------------------------------------------
@@ -179,50 +235,29 @@ df_missing_data <- rbind(dfm_missing_demog,
   ungroup() %>% 
   mutate( year = as.numeric(as.character(year)))
   
-p_missing <- ggplot(df_missing_data, aes(x = as.numeric(year), y = Completeness)) + 
-  geom_line(aes(color = variable)) + 
-  facet_wrap(~var_type) + 
+p_missing <- ggplot(dfm_missing_data, aes(x = as.numeric(as.character(year)), y = (100-Completeness))) + 
+  geom_point(aes(color = variable)) + 
+  geom_line(aes(color = variable), linetype =2) + 
+  #facet_wrap(~var_type) + 
   plot_themes + 
-  ylim(50,100) + 
-  xlab("")
+  ylim(0,50) + 
+  xlab("") + 
+  ylab("Percent missing values")
 
 if(save_plots){
-  save_plot("Missing_data.pdf", p_missing, base_width = 8, base_height = 6)
+  save_plot("Missing_data_demog_all.pdf", p_missing, base_width = 8, base_height = 6)
 }
 
-data_all <- data %>% 
-  mutate(invasive_mgmt = as.numeric(invasive_mgmt) - 1,
-         NSTEMI = as.numeric(NSTEMI) - 1)
 ## Characterize Outcomes ## --------------------------------------------------------------------------------
-dfm_outcomes <- data %>% select(year, died, ICF, NSTEMI, invasive_mgmt, hx_isch_heart, hx_revasc) %>% 
+dfm_outcomes <- data %>% select(year,hx_isch_heart, hx_revasc) %>% 
   apply(.,2,as.numeric) %>% 
   as.data.frame() %>% 
   group_by(year) %>% 
-  summarize(mortality = mean(died, na.rm = T),
-            ICF = mean(ICF, na.rm = T),
-            STEMI = 1-mean(NSTEMI, na.rm=T),
-            invasive_mgmt = mean(invasive_mgmt, na.rm=T),
+  summarize(
             hx_isch_heart = mean(hx_isch_heart, na.rm = T),
             hx_revasc = mean(hx_revasc, na.rm = T)
   ) %>% 
   ungroup()
-
-trend_mortality <- data %>% select(year, died) %>% 
-  table() %>% 
-  CochranArmitageTest(., alternative = c("decreasing"))
-
-trend_ICF <- data %>% filter(died ==0) %>% 
-  select(year, ICF) %>% 
-  table() %>% 
-  CochranArmitageTest(., alternative = c("two.sided"))
-
-trend_NSTEMI <- data %>% select(year, NSTEMI) %>% 
-  table() %>% 
-  CochranArmitageTest(., alternative = c("increasing"))
-
-trend_invasive <- data %>% select(year, invasive_mgmt) %>% 
-  table() %>% 
-  CochranArmitageTest(., alternative = c("increasing"))
 
 trend_isch <- data %>% select(year, hx_isch_heart) %>% 
   table() %>% 
@@ -237,7 +272,7 @@ trend_revasc <- data %>% select(year, hx_revasc) %>%
                     
 ## Exploratory plots ## ---------------------------------------------------------------------------------------------------------------
 
-dfm_dat_demographic_cat <- data_all %>% select(c(year, race, gender, smoking)) %>% 
+dfm_dat_demographic_cat <- data %>% select(c(year, race, gender, smoking)) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
   mutate(value = as.numeric(value)) %>% 
@@ -245,7 +280,7 @@ dfm_dat_demographic_cat <- data_all %>% select(c(year, race, gender, smoking)) %
   summarize(mean = mean(value),
             sd = sd(value))
 
-dfm_dat_demographic_cont <- data_all %>% select(c(year,age)) %>% 
+dfm_dat_demographic_cont <- data %>% select(c(year,age)) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
   mutate(value = as.numeric(value)) %>% 
@@ -253,7 +288,7 @@ dfm_dat_demographic_cont <- data_all %>% select(c(year,age)) %>%
   summarize(mean = mean(value),
             sd = sd(value))
 
-dfm_smoking_age <- data_all %>% select(c(year, age_factor, smoking)) %>% 
+dfm_smoking_age <- data %>% select(c(year, age_factor, smoking)) %>% 
   drop_na() %>% 
   group_by(year, age_factor) %>% 
   summarize(mean = mean((as.numeric(smoking)-1)),
@@ -294,7 +329,7 @@ if(save_plots){
   save_plot("smoking_by_age.pdf", p_smoking_age, base_width = 8, base_height = 4)
 }
 
-dfm_dat_cardiac_risk <- data_all %>% #select(c(cm_chf, cm_dm, cm_perivasc, cm_htn_c, cm_renlfail, HLD, CAD, prior_PCI, prior_CABG, year)) %>% 
+dfm_dat_cardiac_risk <- data %>% #select(c(cm_chf, cm_dm, cm_perivasc, cm_htn_c, cm_renlfail, HLD, CAD, prior_PCI, prior_CABG, year)) %>% 
   select(year, hx_chf, hx_DM, HTN, obesity, HLD, hx_ckd) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
@@ -312,7 +347,7 @@ p_cardiac_risk <- ggplot(dfm_dat_cardiac_risk, aes(x = year, y = mean)) +
   ylab("Mean fraction")+ 
   ggtitle("Cardiac risk factors")
 
-dfm_dat_ASCVD <- data_all %>% #select(c(cm_chf, cm_dm, cm_perivasc, cm_htn_c, cm_renlfail, HLD, CAD, prior_PCI, prior_CABG, year)) %>% 
+dfm_dat_ASCVD <- data %>% #select(c(cm_chf, cm_dm, cm_perivasc, cm_htn_c, cm_renlfail, HLD, CAD, prior_PCI, prior_CABG, year)) %>% 
   select(year, hx_isch_heart, PAD, hx_CVA) %>% 
   mutate(ASCVD = as.numeric(PAD ==1 | hx_isch_heart == 1 | hx_CVA == 1)) %>% 
   melt(., id.vars = "year") %>% 
@@ -336,79 +371,5 @@ if(save_plots){
   save_plot("cardiac_risk.pdf", p_cardiac, base_width = 14, base_height = 6)
 }
 
-dfm_died <- data_all %>% filter(invasive_mgmt == 0) %>% 
-  select(c(year, died)) %>% 
-  melt(., id.vars = "year") %>% 
-  drop_na() %>% 
-  mutate(value = as.numeric(value)) %>% 
-  group_by(year, variable) %>% 
-  summarize(mean = mean(value),
-            sd = sd(value))
-
-dfm_ICF <- data_all %>% select(c(year, ICF)) %>% 
-  melt(., id.vars = "year") %>% 
-  drop_na() %>% 
-  mutate(value = as.numeric(value)) %>% 
-  group_by(year, variable) %>% 
-  summarize(mean = mean(value),
-            sd = sd(value))
-
-dfm_inv <- data_all %>% select(c(year, invasive_mgmt)) %>% 
-  melt(., id.vars = "year") %>% 
-  drop_na() %>% 
-  mutate(value = as.numeric(value)) %>% 
-  group_by(year, variable) %>% 
-  summarize(mean = mean(value),
-            sd = sd(value))
-
-dfm_NSTEMI <- data_all %>% select(c(year, NSTEMI)) %>% 
-  melt(., id.vars = "year") %>% 
-  drop_na() %>% 
-  mutate(value = as.numeric(value)) %>% 
-  group_by(year, variable) %>% 
-  summarize(mean = mean(value),
-            sd = sd(value))
-
-df_inv_AND_NSTEMI <- data %>% group_by(year) %>% 
-  summarize(mean = sum(NSTEMI == 1 & invasive_mgmt == 1)/sum(NSTEMI ==1)) %>% 
-  mutate(variable = "Rate of invasive management with NSTEMI")
-
-df_inv_AND_STEMI <- data %>% group_by(year) %>% 
-  summarize(mean = sum(NSTEMI == 0 & invasive_mgmt == 1)/sum(NSTEMI ==0)) %>% 
-  mutate(variable = "Rate of invasive management with STEMI")
-
-p_died <- ggplot(dfm_died, aes(x = year, y = mean)) + 
-  geom_point(aes(color = variable)) + 
-  geom_line(aes(group = variable, color = variable), linetype = 2) +
-  #geom_errorbar(aes(group = variable, color = variable, ymin = mean -sd, ymax = mean + sd)) + 
-  ylim(0,0.2) + 
-  plot_themes + 
-  ggtitle("Mortality")
-
-p_ICF <- ggplot(dfm_ICF, aes(x = year, y = mean)) + 
-  geom_point(aes(color = variable)) + 
-  geom_line(aes(group = variable, color = variable), linetype = 2) +
-  #geom_errorbar(aes(group = variable, color = variable, ymin = mean -sd, ymax = mean + sd)) + 
-  ylim(0,0.5) + 
-  plot_themes + 
-  ggtitle("Discharge to intermediate care facility")
-
-dfm_inv_NSTEMI <- rbind(dfm_inv, dfm_NSTEMI)
-p_invasive <- ggplot(dfm_inv_NSTEMI, aes(x = year, y = mean)) + 
-  geom_point(aes(color = variable)) + 
-  geom_line(aes(group = variable, color = variable), linetype = 2) + 
-  geom_point(data = df_inv_AND_NSTEMI, aes(x = year, y = mean, color = variable)) + 
-  geom_line(data = df_inv_AND_NSTEMI, aes(x = as.numeric(year), y = mean, color = variable), linetype =2) + 
-  geom_point(data = df_inv_AND_STEMI, aes(x = year, y = mean, color = variable)) + 
-  geom_line(data = df_inv_AND_STEMI, aes(x = as.numeric(year), y = mean, color = variable), linetype =2) + 
-  ylim(0,1) + 
-  plot_themes + 
-  ggtitle("NSTEMI, STEMI, and Invasive management")
-
-if(save_plots){
-  save_plot("Mortality.pdf", p_died, base_width = 8, base_height = 4)
-  save_plot("Invasive_mgmt.pdf", p_invasive, base_width = 8, base_height = 4)
-  save_plot("Dispo.pdf", p_ICF, base_width = 8, base_height = 4)
-}
 
 

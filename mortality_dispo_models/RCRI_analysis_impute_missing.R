@@ -2,7 +2,7 @@
 ## Sylvia Ranjeva 
 
 # Set the working directory to the source file directory
-setwd("~/Desktop/perip_MI_GITHUB")
+setwd("~/Desktop/perip_MI_GITHUB/mortality_dispo_models/")
 
 ## Load package scripts -----------------------------------------------
 require(ggplot2)
@@ -29,10 +29,10 @@ select <- dplyr::select
 #Plotting specs
 textSize = 12
 save_plots = F
-source("plot_themes.R")
+source("../utility_scripts/plot_themes.R")
 
 #Data saving
-data_filename = "data_all_raw_2.rda"
+data_filename = "data_imputed.rda"
 save_data = F
 drop_missing = F
 impute_missing = T
@@ -81,6 +81,7 @@ if(generate_data == T){
 if(generate_data == F){
   load(data_filename)
    data <- data_formatted 
+   rm(data_formatted)
 }
 
 ## Exploratory plots ## ------------------------------------------------------------------------------------------------
@@ -240,6 +241,8 @@ p_ind_year <-  qplot(data = out.ind, x = `dim 1`, y = `dim 2`, colour = year) +
   plot_themes
 
 if(save_plots){
+  save_plot("RCRI_ind.pdf", p_ind_RCRI, base_width = 6, base_height =4)
+  save_plot("year_ind.pdf", p_ind_year, base_width = 8, base_height =6)
   ind_plots <- plot_grid(p_ind_RCRI, p_ind_year, ncol =2)
   save_plot("ind_plots.pdf", ind_plots, base_width = 12, base_height = 4)
 }
@@ -268,15 +271,31 @@ out.RCRIplus <- glm(as.numeric(died) ~  age +
                       hx_CVA + 
                       hx_DM + 
                       hx_ckd + 
+                      hx_isch_heart + 
+                      hx_revasc + 
                       high_risk_surgery + 
                       invasive_mgmt +
                       NSTEMI + 
-                      hx_isch_heart + 
                       severe_MI , 
                     data = data, family = "binomial")
 
-model_comp <- data.frame(model = c("Full", "PCA", "RCRIPlus"), 
-                         BIC = c(BIC(out.full), BIC(out.PCA), BIC(out.RCRIplus))) %>% 
+out.null <- glm(as.numeric(died) ~  age +
+                  gender + 
+                  race + 
+                  year + 
+                  Afib + 
+                  sepsis +
+                  PNA + 
+                  PE + 
+                  DVT + 
+                  Bleed + 
+                  invasive_mgmt +
+                  NSTEMI + 
+                  severe_MI , 
+                data = data, family = "binomial")
+
+model_comp <- data.frame(model = c("Full", "PCA", "RCRIPlus", "null"), 
+                         BIC = c(BIC(out.full), BIC(out.PCA), BIC(out.RCRIplus), BIC(out.null))) %>% 
   mutate(delta = BIC - min(BIC))
 
 mod_coefs <- data.frame(apply(exp(cbind(OR = coef(out.RCRIplus), confint(out.RCRIplus))),2,round,2))
@@ -345,7 +364,53 @@ if(save_plots){
 out.contrib$max_contrib <- apply(out.contrib %>% select(-var),1,max) 
 retained_vars <- out.contrib %>% filter(max_contrib > 9) %>% select(var)
 
-## Logit Regression analysis ## ------------------------------------------------------------------------------
+## Prediction by number of RCRI factors ## --------------------------------------
+dat_sub <- data %>% filter(!is.na(died) #& 
+                           #invasive_mgmt == 0 & 
+                           #sepsis == 0 & 
+                           #PNA == 0  
+                           #Bleed == 0 
+                           )
+
+pred.test <- predict(out.RCRIplus, 
+                      dat_sub,
+                     type = "response")
+
+dat_sub_agg <- dat_sub %>% select(ind, died, NSTEMI, gender, invasive_mgmt, hx_chf, hx_isch_heart, hx_CVA, hx_DM, hx_ckd, high_risk_surgery) %>% 
+  mutate_if(is.factor, as.character) %>% 
+  mutate_if(is.character, as.numeric) %>% 
+  mutate(RCRI = hx_chf + hx_isch_heart + hx_CVA + hx_DM + hx_ckd + high_risk_surgery) %>% 
+  mutate(RCRI2 = RCRI) %>% 
+  mutate(prob = pred.test) 
+
+dat_sub_agg[dat_sub_agg$RCRI2 > 4,]$RCRI2 <- 4
+
+
+df <- dat_sub_agg %>% 
+  group_by(RCRI2, invasive_mgmt, hx_isch_heart) %>% 
+  summarise(med = median(prob),
+            q1 = quantile(prob,.25),
+            q2 = quantile(prob,.75))
+
+df$invasive_mgmt = as.factor(df$invasive_mgmt)
+levels(df$invasive_mgmt)<- c("No invasive management", "Invasive management")
+df$hx_isch_heart = as.factor(df$hx_isch_heart)
+levels(df$hx_isch_heart)<- c("No prior CAD", "Prior CAD")
+
+p_risk <- ggplot(df, aes(x = RCRI, y = med)) +  
+  geom_point() + geom_line() + 
+  geom_errorbar(aes(ymin = q1, ymax = q2), linetype = 2) + 
+  facet_wrap(.~invasive_mgmt + hx_isch_heart, scales = "free_y") +
+  xlab("RCRI") + 
+  ylab("Median probability (IQR)") +
+  plot_themes
+  
+if(save_plots){
+  save_plot("Risk_by_RCRI_and_CAD.pdf", p_risk, base_width = 8, base_height = 6)
+}
+
+
+## Analysis of dispo outcome ## ------------------------------------------------------------------------------
 data$ICF <- as.numeric(data$ICF==1)
 sub.PCA.dispo <- data[,(colnames(data) %in% c("ICF", "died", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI", unlist(retained_vars)))]
 out.PCA.dispo <- glm(as.numeric(ICF) ~., data = sub.PCA.dispo, family = "binomial")

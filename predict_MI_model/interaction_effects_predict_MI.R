@@ -155,9 +155,8 @@ out.RCRIplus <- glm(as.numeric(died) ~  age +
                       invasive_mgmt +
                       NSTEMI + 
                       hx_isch_heart + 
-                      hx_revasc + 
                       severe_MI, 
-                    data = data %>% filter(ICF == 0) %>% filter(hx_isch_heart ==1), family = "binomial")
+                    data = data %>% filter(ICF == 0), family = "binomial")
 
 mod_coefs1 <- data.frame(apply(exp(cbind(OR = coef(out.RCRIplus), confint(out.RCRIplus))),2,round,2))
 # Demographic factors
@@ -178,7 +177,6 @@ mod5 <- update(out.RCRIplus, . ~ . + age*race +
                  hx_isch_heart*gender + 
                  hx_isch_heart*NSTEMI + 
                  hx_isch_heart*high_risk_surgery + 
-                 hx_revasc*hx_isch_heart +
                  NSTEMI*Bleed + 
                  NSTEMI*age  
                  )

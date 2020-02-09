@@ -36,7 +36,7 @@ pr_fun <- function(code, x){
 
 # Query the database to obtain the relevant dataframe ## ------------------------------------------------------------------------
 
-pr_mapping <- read.csv("./data_files/pc2015.csv") %>% 
+pr_mapping <- read.csv("../data_files/pc2015.csv") %>% 
   as.data.frame()
 names(pr_mapping) <- c("ICD9", "cat")
 
@@ -61,6 +61,7 @@ pr_ccs_excluded <- c(8, # non-OR nervous system
                      111, 117, 131, # non-OR GU
                      163, # non-OR MSK
                      174, # non-OR skin/breast,
+                     211, # Radiation
                      229 #non-operative removal of foreign body
 )
 
@@ -97,7 +98,7 @@ for(i in c(1:length(year_vec))){
   nis_query <- gsub("dx_snippet", dx_snippet, nis_query)
   
   # Perform the query
-  db <- dbConnect(RSQLite::SQLite(), "NIS.db") 
+  db <- dbConnect(RSQLite::SQLite(), "../data_files/NIS.db") 
   q <- RSQLite::dbSendQuery(db, nis_query)
   # Get the data
   t <- Sys.time()
@@ -110,6 +111,29 @@ for(i in c(1:length(year_vec))){
   dbDisconnect(db)
   time_elapsed = t2 - t
   print(time_elapsed)
+  
+  ## Define procedure type ## --------------------------------------
+  pr_list <- list(c(1:9),c(10:12),
+                  c(13:21), 
+                  c(22:35), 
+                  c(36:42),
+                  c(43:50, 62:63),
+                  c(51:61),
+                  c(66:99), 
+                  c(100:118),
+                  c(119:125,129:132),
+                  c(126:128, 133:141),
+                  c(142:164),
+                  c(165:167),
+                  c(168:175),
+                  176)
+  names(pr_list) = c("Neuro", "Endo","Optho","ENT","Thoracic","Cardiac","Vascular","General","GU", "Gynecologic", "Obstetric", "Orthopedic","Breast","Skin/burn", "Transplant")
+  
+  pr_df <- stack(pr_list) %>% 
+    as.data.frame() %>% 
+    stats::setNames(c("code","type"))
+  
+  core_df$surgery_type <- sapply(as.numeric(core_df$prccs1), pr_class_fun, code_df = pr_df)
   
   ## ASCVD risk factors ## --------------------------------------------------------------------------
   
@@ -395,6 +419,7 @@ for(i in c(1:length(year_vec))){
              IABP,
              cardiogenic_shock,
              ICF,
+             los,
              year))  
   
   if(drop_missing){
