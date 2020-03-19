@@ -1,9 +1,5 @@
 ## Exploratory data analysis; Perioperative MI 
 ## Sylvia Ranjeva 
-
-# Set the working directory to the source file directory
-setwd("~/Desktop/perip_MI_GITHUB")
-
 ## Load package scripts -----------------------------------------------
 require(ggplot2)
 require(dplyr)

@@ -61,7 +61,7 @@ pr_ccs_excluded <- c(8, # non-OR nervous system
                      111, 117, 131, # non-OR GU
                      163, # non-OR MSK
                      174, # non-OR skin/breast,
-                     #211, # Radiation
+                     211, # Radiation
                      229 #non-operative removal of foreign body
 )
 
@@ -87,7 +87,7 @@ for(i in c(1:length(year_vec))){
     new_txt <- paste0(" OR dx",j," LIKE '410%'")
     dx_snippet <- paste0(dx_snippet, new_txt)
   }
-  nis_query <- "SELECT * FROM data_y WHERE (pr_snippet) AND (pr_ccs_snippet) AND (dx_snippet) AND age > 45 AND elective == 1"
+  nis_query <- "SELECT * FROM data_y WHERE (pr_snippet) AND (pr_ccs_snippet) AND age > 45 AND elective == 1"
 
   #Sub correct year and procedure codes 
   nis_query <- gsub("y", toString(year), nis_query)
@@ -339,6 +339,11 @@ for(i in c(1:length(year_vec))){
                                    dx_fun,  
                                    string = "^433|^434")
   
+  core_df$MI <- apply(core_df %>% select(starts_with("dx")), 
+                      1, 
+                      dx_fun,  
+                      string = "^410")
+  
   ## Dispo outcomes 
   
   core_df$ICF <- as.integer(core_df$dispuniform == 5)
@@ -369,6 +374,7 @@ for(i in c(1:length(year_vec))){
     select(c(age, 
              race, 
              gender,
+             MI,
              nchronic,
              cm_obese,
              smoking,
@@ -412,11 +418,12 @@ for(i in c(1:length(year_vec))){
              cardiogenic_shock,
              ICF,
              los,
+             prccs1,
              year,
-             hospid, 
-             nis_stratum,
+             #discwt,
              trendwt,
-             prccs1
+             hospid,
+             nis_stratum
              ))  
   
   if(drop_missing){

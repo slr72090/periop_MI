@@ -336,7 +336,7 @@ if(save_plots){
   save_plot("cardiac_risk.pdf", p_cardiac, base_width = 14, base_height = 6)
 }
 
-dfm_died <- data_all %>% filter(invasive_mgmt == 0) %>% 
+dfm_died <- data %>% filter(invasive_mgmt == 0) %>% 
   select(c(year, died)) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
@@ -345,7 +345,7 @@ dfm_died <- data_all %>% filter(invasive_mgmt == 0) %>%
   summarize(mean = mean(value),
             sd = sd(value))
 
-dfm_ICF <- data_all %>% select(c(year, ICF)) %>% 
+dfm_ICF <- data %>% select(c(year, ICF)) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
   mutate(value = as.numeric(value)) %>% 
@@ -353,7 +353,7 @@ dfm_ICF <- data_all %>% select(c(year, ICF)) %>%
   summarize(mean = mean(value),
             sd = sd(value))
 
-dfm_inv <- data_all %>% select(c(year, invasive_mgmt)) %>% 
+dfm_inv <- data %>% select(c(year, invasive_mgmt)) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
   mutate(value = as.numeric(value)) %>% 
@@ -361,7 +361,7 @@ dfm_inv <- data_all %>% select(c(year, invasive_mgmt)) %>%
   summarize(mean = mean(value),
             sd = sd(value))
 
-dfm_NSTEMI <- data_all %>% select(c(year, NSTEMI)) %>% 
+dfm_NSTEMI <- data %>% select(c(year, NSTEMI)) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
   mutate(value = as.numeric(value)) %>% 

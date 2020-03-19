@@ -1,8 +1,11 @@
 ## Exploratory data analysis; Perioperative MI 
 ## Sylvia Ranjeva 
 
+## Exploratory data analysis; Perioperative MI 
+## Sylvia Ranjeva 
+
 # Set the working directory to the source file directory
-setwd("~/Desktop/perip_MI_GITHUB")
+setwd("~/Desktop/perip_MI_GITHUB/mortality_dispo_models/")
 
 ## Load package scripts -----------------------------------------------
 require(ggplot2)
@@ -24,16 +27,16 @@ require(MASS)
 library(proto)
 library(pROC)
 library(xtable)
+library(survey)
 select <- dplyr::select
 
 #Plotting specs
 textSize = 12
 save_plots = F
-source("plot_themes.R")
+source("../utility_scripts/plot_themes.R")
 
-## Get data ## ---------------------------------------------------------------------
 #Data saving
-data_filename = "data_all_raw.rda"
+data_filename = "Data_objects/data_imputed_with_weights.rda" 
 save_data = F
 drop_missing = F
 impute_missing = T
@@ -59,11 +62,12 @@ if(generate_data == T){
            age = as.numeric(scale(age)),
            nchronic = as.numeric(scale(nchronic)),
            invasive_mgmt = as.factor(invasive_mgmt),
-           high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
+           high_risk_surgery = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1|abdominal == 1)),
+           high_risk_surgery_2 = as.factor(as.numeric(transplant == 1|thoracic_surgery == 1|vascular == 1)),
            hx_revasc = as.factor(as.numeric(prior_CABG == 1 | prior_PCI ==1))) %>% 
     mutate(RCRI_pt = as.factor(as.numeric(RCRI_pt) + as.numeric(high_risk_surgery == 1))) %>% 
     mutate(severe_MI = as.factor(as.numeric(cardiogenic_shock == 1 | IABP == 1))) %>% 
-    select(-c(prior_CABG, prior_PCI, prior_MI, CAD, transplant,thoracic_surgery,vascular,nchronic)) %>% 
+    select(-c(prior_CABG, prior_PCI, prior_MI, CAD)) %>% #transplant,thoracic_surgery,vascular,)) %>% 
     mutate(`RCRI >= 3` = as.factor(as.numeric(RCRI_pt) > 3))
   
   if(impute_missing){
@@ -74,90 +78,47 @@ if(generate_data == T){
   data = data_formatted
   
   if(save_data){
-    save(data, file = data_filename)
+    save(data_formatted, data_all, file = data_filename)
   }
 }
 
 if(generate_data == F){
   load(data_filename)
-  source("impute_missing.R")
-  data_formatted[,missing_vars] <- complete_data[,missing_vars]
   data <- data_formatted 
+  rm(data_formatted)
 }
-## Visualize correlations ## --------------------------------------------------
-cor_data <- data %>% select(-c(ind, 
-                               year, 
-                               invasive_mgmt, 
-                               Afib,
-                               sepsis,
-                               PNA, 
-                               PE,
-                               DVT,
-                               Bleed,
-                               died, 
-                               ICF,
-                               severe_MI,
-                               cardiogenic_shock,
-                               IABP,
-                               RCRI_pt, 
-                               age, 
-                               `RCRI >= 3`, 
-                               cm_mets)) %>% 
-  apply(.,2,as.numeric)
-M <- cor(cor_data)
-diag(M) <- 0
-p_cor <- corrplot(M,
-                  method = "shade",
-                  type = "lower", 
-                  order = "hclust",
-                  tl.col = "black",
-                  tl.cex = .75)
 
-cor_data_acute <- data %>% select(c(age_factor, 
-                                    NSTEMI,
-                                    severe_MI,
-                                    Bleed, 
-                                    PE,
-                                    DVT,
-                                    Afib,
-                                    PNA,
-                                    sepsis)) %>% 
-  mutate(STEMI = 1- as.numeric(NSTEMI)) %>% 
-  apply(.,2,as.numeric) 
-
-M_acute <- cor(cor_data_acute)
-diag(M_acute) <- 0
-p_cor_acute <- corrplot(M_acute,
-                        method = "shade",
-                        type = "lower",
-                        diag=T,
-                        order = "hclust",
-                        tl.col = "black",
-                        tl.cex = .75)
+options(survey.lonely.psu="adjust")
+#var_names_full <- c(names(X1), names(X2), "nchronic", "cm_mets", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI", "invasive_mgmt")#, "nchronic")
+#dat_full <- data %>% select(c(year, died, trendwt, hospid, nis_stratum, var_names_full))
+survey_df_full <- svydesign(ids = ~hospid, strata = ~nis_stratum, weights = ~trendwt, data = data, nest =T)
 
 
 ## Interaction effects for mortality model ## ---------------------------------------------------------------------
-out.RCRIplus <- glm(as.numeric(died) ~  age +
-                      gender + 
-                      race + 
-                      year + 
-                      Afib + 
-                      sepsis +
-                      PNA + 
-                      PE + 
-                      DVT + 
-                      Bleed + 
-                      hx_chf +
-                      hx_CVA + 
-                      hx_DM + 
-                      hx_ckd + 
-                      high_risk_surgery + 
-                      invasive_mgmt +
-                      NSTEMI + 
-                      hx_isch_heart + 
-                      hx_revasc + 
-                      severe_MI, 
-                    data = data %>% filter(ICF == 0) %>% filter(hx_isch_heart ==1), family = "binomial")
+out.RCRIplus <- svyglm(as.numeric(died) ~ 
+                         age +
+                         gender + 
+                         race + 
+                         year + 
+                         Afib + 
+                         sepsis +
+                         PNA + 
+                         PE + 
+                         DVT + 
+                         Bleed + 
+                         hx_chf +
+                         hx_DM + 
+                         hx_ckd + 
+                         hx_CVA + 
+                         hx_isch_heart+ 
+                         #hx_revasc + 
+                         high_risk_surgery + 
+                         #surgery_type + 
+                         invasive_mgmt +
+                         NSTEMI + 
+                         severe_MI ,
+                       design = survey_df_full,
+                       family = "binomial")
 
 mod_coefs1 <- data.frame(apply(exp(cbind(OR = coef(out.RCRIplus), confint(out.RCRIplus))),2,round,2))
 # Demographic factors
@@ -193,15 +154,51 @@ interaction_mod_mortality_BIC <- data.frame(Model = c(1:5),
                                            BIC(mod5))) %>% 
                                      mutate(delta = BIC - min(BIC))
 
+names(mod_coefs5)<- c("OR", "2.5% CI", "97.5% CI")
+coef_df <- data.frame(Var = rownames(mod_coefs5),
+                      OR = paste0(mod_coefs5$OR, " [", mod_coefs5$"2.5% CI", ", ",  mod_coefs5$"97.5% CI", "]"))
+
+if(output_tables){
+  tab_coefs <- xtable(coef_df)
+  print(tab_coefs, file="mortality_model_interaction_coefs.txt", include.rownames = F)
+}
+
 ## Interaction effects for discharge to ICF model ## ---------------------------------------------------------------------
-data$ICF <- as.numeric(data$ICF==1)
-var_names_full <- c("age", "race", "gender", "obesity","smoking", "alcoholic",
-                    "HTN", "HLD", "hx_DM", "hx_ckd", "hx_isch_heart", "hx_revasc", "PAD", "valve_dz",
-                    "hx_chf","hx_VTE", "chrnlung","malignancy","anemia","hx_CVA", "high_risk_surgery",
-                    "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI")
-data_full_dispo <- data %>% #filter(died == 0) %>% 
-  select(c(year, ICF, died, invasive_mgmt, var_names_full)) 
-out.full.dispo <- glm(ICF ~. , data = data_full_dispo, family = "binomial")
+out.full.dispo <- svyglm(ICF ~ year + 
+                     age + 
+                     race + 
+                     gender + 
+                     obesity + 
+                     smoking + 
+                     alcoholic + 
+                     HTN + 
+                     HLD + 
+                     hx_DM + 
+                     hx_ckd + 
+                     hx_isch_heart + 
+                     PAD + 
+                     valve_dz + 
+                     hx_chf + 
+                     hx_VTE + 
+                     chrnlung + 
+                     malignancy + 
+                     cm_mets + 
+                     anemia +
+                     hx_CVA + 
+                     Afib + 
+                     sepsis + 
+                     PNA + 
+                     PE + 
+                     DVT + 
+                     Bleed + 
+                     NSTEMI + 
+                     invasive_mgmt + 
+                     high_risk_surgery +
+                     severe_MI,
+                   design = survey_df_full,
+                   family = "binomial")
+
+
 mod_coefs1.dispo <- data.frame(apply(exp(cbind(OR = coef(out.full.dispo), confint(out.full.dispo))),2,round,2))
 
 # Demographic factors 
@@ -253,3 +250,12 @@ interaction_mod_dispo_BIC <- data.frame(Model = c(1:5),
                                                     BIC(mod4.dispo),
                                                     BIC(mod5.dispo))) %>% 
   mutate(delta = BIC - min(BIC))
+
+names(mod_coefs5.dispo)<- c("OR", "2.5% CI", "97.5% CI")
+coef_df <- data.frame(Var = rownames(mod_coefs5.dispo),
+                      OR = paste0(mod_coefs5.dispo$OR, " [", mod_coefs5.dispo$"2.5% CI", ", ",  mod_coefs5.dispo$"97.5% CI", "]"))
+
+if(output_tables){
+  tab_coefs <- xtable(coef_df)
+  print(tab_coefs, file="dispo_model_interaction_coefs.txt", include.rownames = F)
+}

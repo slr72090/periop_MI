@@ -33,7 +33,7 @@ save_plots = F
 source("../utility_scripts/plot_themes.R")
 
 #Data saving
-data_filename = "Data_objects/data_raw_with_weights_imputed.rda"
+data_filename = "Data_objects/data_imputed_with_weights.rda" 
 save_data = F
 drop_missing = F
 impute_missing = T
@@ -81,8 +81,8 @@ if(generate_data == T){
  
 if(generate_data == F){
   load(data_filename)
-   data <- data_formatted 
-   rm(data_formatted)
+  data <- data_formatted 
+  rm(data_formatted)
 }
 
 
@@ -204,23 +204,58 @@ if(save_plots){
 
 
 ## Logit Regression analysis ## ------------------------------------------------------------------------------
-
-survey_df <- svydesign(ids = ~hospid, strata = ~nis_stratum, weights = ~trendwt, data = data, nest =T)
-sub.PCA <- data[,(colnames(data) %in% c("died", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT",  "Bleed", "NSTEMI", "severe_MI", "trendwt", unlist(retained_vars)))]
-out.PCA <- glm(as.numeric(died) ~., 
-               data = sub.PCA,
-               weights = trendwt,
-               family = "binomial")
-
-var_names_full <- c(names(X1), names(X2), "cm_mets", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI")#, "nchronic")
-data_full <- data %>% select(c(year, died, invasive_mgmt, trendwt, var_names_full))
-out.full <- glm(died ~., 
-                data = data_full, 
-                family = "binomial")
+mysvy <- function(col_names)  {
+  z <- eval(parse(text= paste0("svyglm(died ~", paste(col_names, collapse = "+"), ", design = survey_df_full)")), 
+            env=.GlobalEnv)
+  return(z)
+}
 
 options(survey.lonely.psu="adjust")
+var_names_full <- c(names(X1), names(X2), "nchronic", "cm_mets", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI", "invasive_mgmt")#, "nchronic")
+dat_full <- data %>% select(c(year, died, trendwt, hospid, nis_stratum, var_names_full))
+dat_PCA <- data[,(colnames(data) %in% c("hospid", "nis_stratum", "trendwt", "died", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT",  "Bleed", "NSTEMI", "severe_MI", "trendwt", unlist(retained_vars)))]
 
-out.RCRIplus <- svyglm(as.numeric(died) ~  age +
+survey_df_full <- svydesign(ids = ~hospid, strata = ~nis_stratum, weights = ~trendwt, data = dat_full, nest =T)
+
+#out.PCA <-  eval(parse(text= paste0("svyglm(died ~", paste(col_names, collapse = "+"), ", design = survey_df_full)")), 
+                    #env=.GlobalEnv)
+
+out.full <- svyglm(as.numeric(died) ~ year + 
+                     age + 
+                     race + 
+                     gender + 
+                     obesity + 
+                     smoking + 
+                     alcoholic + 
+                     HTN + 
+                     HLD + 
+                     hx_DM + 
+                     hx_ckd + 
+                     hx_isch_heart + 
+                     PAD + 
+                     valve_dz + 
+                     hx_chf + 
+                     hx_VTE + 
+                     chrnlung + 
+                     malignancy + 
+                     cm_mets + 
+                     anemia +
+                     hx_CVA + 
+                     Afib + 
+                     sepsis + 
+                     PNA + 
+                     PE + 
+                     DVT + 
+                     Bleed + 
+                     NSTEMI + 
+                     invasive_mgmt + 
+                     high_risk_surgery +
+                     severe_MI,
+                   design = survey_df_full,
+                   family = "binomial")
+
+out.RCRIplus <- svyglm(as.numeric(died) ~ 
+                         age +
                          gender + 
                          race + 
                          year + 
@@ -231,44 +266,20 @@ out.RCRIplus <- svyglm(as.numeric(died) ~  age +
                          DVT + 
                          Bleed + 
                          hx_chf +
-                         hx_CVA + 
                          hx_DM + 
                          hx_ckd + 
-                         hx_isch_heart + 
-                         hx_revasc + 
+                         hx_CVA + 
+                         hx_isch_heart+ 
+                         #hx_revasc + 
                          high_risk_surgery + 
                          #surgery_type + 
                          invasive_mgmt +
-                         hx_revasc + 
                          NSTEMI + 
                          severe_MI ,
-                       design = survey_df)
+                       design = survey_df_full,
+                       family = "binomial")
 
-out.RCRIplus <- glm(as.numeric(died) ~  age +
-                      gender + 
-                      race + 
-                      year + 
-                      Afib + 
-                      sepsis +
-                      PNA + 
-                      PE + 
-                      DVT + 
-                      Bleed + 
-                      hx_chf +
-                      hx_CVA + 
-                      hx_DM + 
-                      hx_ckd + 
-                      hx_isch_heart + 
-                      high_risk_surgery + 
-                      #surgery_type + 
-                      invasive_mgmt +
-                      NSTEMI + 
-                      hx_revasc + 
-                      severe_MI , 
-                    data = data, 
-                    family = "binomial")
-
-out.null <- glm(as.numeric(died) ~  age +
+out.null <- svyglm(as.numeric(died) ~  age +
                   gender + 
                   race + 
                   year + 
@@ -282,25 +293,25 @@ out.null <- glm(as.numeric(died) ~  age +
                   NSTEMI + 
                   severe_MI +
                   NSTEMI*Bleed, 
-                data = data,
-                weights = trendwt,
+                design = survey_df_full,
                 family = "binomial")
 
-model_comp <- data.frame(model = c("Full", "PCA", "RCRIPlus", "null"), 
-                         n_par = c(out.full$rank, out.PCA$rank, out.RCRIplus$rank, out.null$rank),
-                         LL = c(logLik(out.full),logLik(out.PCA), logLik(out.RCRIplus), logLik(out.null)),
-                         BIC = c(BIC(out.full), BIC(out.PCA), BIC(out.RCRIplus), BIC(out.null))) %>% 
+model_comp <- data.frame(model = c("Full", "RCRIPlus", "null"), 
+                         n_par = c(out.full$rank, out.RCRIplus$rank, out.null$rank),
+                         #LL = c(logLik(out.full), logLik(out.RCRIplus), logLik(out.null)),
+                         BIC = c(BIC(out.full, maximal = out.full)["BIC"], BIC(out.RCRIplus, maximal = out.RCRIplus)["BIC"],  BIC(out.null, maximal = out.null)["BIC"])) %>% 
   mutate(delta = BIC - min(BIC))
 
 confidence_intervals =  confint.default(out.RCRIplus, adjust = "bonferroni")
 mod_coefs <- data.frame(apply(exp(cbind(OR = coef(out.RCRIplus),confidence_intervals)),2,round,2))
-mod_coefs <- data.frame(apply(exp(cbind(OR = coef(out.RCRIplus), confint(out.RCRIplus))),2,round,2))
 names(mod_coefs)<- c("OR", "2.5% CI", "97.5% CI")
+coef_df <- data.frame(Var = rownames(mod_coefs),
+                            OR = paste0(mod_coefs$OR, " [", mod_coefs$"2.5% CI", ", ",  mod_coefs$"97.5% CI", "]"))
+
 if(output_tables){
-  tab_coefs <- xtable(mod_coefs)
+  tab_coefs <- xtable(coef_df)
   print(tab_coefs, file="mortality_model_coefs.txt")
 }
-
 
 ## Testing model out of sample ## -------------------------------------------
 
@@ -310,32 +321,8 @@ train <- data[sample,]
 test <- data[-sample,]
 
 library(pROC)
-
-out.RCRIplus.train <- glm(as.numeric(died) ~ age +
-                            gender + 
-                            race + 
-                            year + 
-                            Afib + 
-                            sepsis +
-                            PNA + 
-                            PE + 
-                            DVT + 
-                            Bleed + 
-                            hx_isch_heart +
-                            PAD + 
-                            hx_chf +
-                            hx_CVA + 
-                            hx_DM + 
-                            hx_ckd + 
-                            high_risk_surgery + 
-                            invasive_mgmt +
-                            hx_revasc + 
-                            NSTEMI + 
-                            severe_MI, 
-                          data = train, 
-                          family = "binomial")
-
-out.full.train <- glm(died ~., data = (train %>% select(c(year, died, invasive_mgmt, severe_MI, var_names_full))), family = "binomial")
+out.RCRIplus.train <- predict(out.RCRIplus, newdata = train)
+out.full.train <- predict(out.full, newdata = train)
 
 test_prob_RCRIplus = predict(out.RCRIplus, newdata = test, type = "response")
 test_roc_RCRIplus = roc(test$died ~ test_prob_RCRIplus, plot = TRUE, print.auc = TRUE)
@@ -353,92 +340,15 @@ if(save_plots){
   save_plot("ROC_curves_mortality.pdf", p_roc, base_width = 8, base_height = 4)
 }
 
-
 ## Summary statistics, and evaluate dependnece of ROC on percent test data #### -----------------------
 AUC_RCRIplus <- ci.auc(test_roc_RCRIplus, method = "bootstrap")
 AUC_full <- ci.auc(test_roc_full, method = "bootstrap")
 
-if(compare_models){
-  var_names_RCRI <- c("age", "race", "gender", 
-                      "hx_DM", "Afib", "sepsis", 
-                      "PNA", "PE", "DVT",
-                      "Bleed", "hx_chf", "hx_CVA", 
-                      "hx_DM", "hx_ckd", "hx_isch_heart", 
-                      "hx_revasc", "high_risk_surgery", 
-                      "invasive_mgmt", "NSTEMI", "severe_MI")
-  dat_AUC <- data %>% filter(!is.na(died)) %>% 
-    select(c(died,var_names_full)) %>% 
-    mutate_if(is.factor, as.character) %>% 
-    mutate_if(is.character, as.integer)
-  
-  mat_RCRI <- as.matrix(dat_AUC[,(names(dat_AUC) %in% var_names_RCRI)])
-  mat_Full <- as.matrix(dat_AUC[,var_names_full[!(var_names_full %in% var_names_RCRI)]])[,-13]
-  
-  AUC_compare <- deltaAUC(y = dat_AUC$died, 
-                          x = mat_RCRI,
-                          z = mat_Full)
-}                  
-                        
-                      #  x = dat_AUC[,(names(dat_AUC) %in% var_names_RCRI)], 
-                      #  z = dat_AUC[,var_names_full[!(var_names_full %in% var_names_RCRI)]])
-ROC_test_size <- data.frame()
-test_percent_vec <- seq(0.5,1.0,0.05)
-for(i in c(1:length(test_percent_vec))){
-  print(i)
-  set.seed(364)
-  sample <- sample(nrow(data),floor(nrow(data)*test_percent_vec[i]))
-  this_train <- data[sample,]
-  this_test <- data[-sample,]
-  out.RCRIplus.train <- glm(as.numeric(died) ~ age +
-                              gender + 
-                              race + 
-                              year + 
-                              #smoking + 
-                              #HLD + 
-                              Afib + 
-                              sepsis +
-                              PNA + 
-                              PE + 
-                              DVT + 
-                              Bleed + 
-                              hx_isch_heart +
-                              PAD + 
-                              hx_chf +
-                              hx_CVA + 
-                              hx_DM + 
-                              hx_ckd + 
-                              high_risk_surgery + 
-                              invasive_mgmt +
-                              NSTEMI + 
-                              severe_MI, 
-                            data = this_train, 
-                            family = "binomial")
-  test_prob_RCRIplus_temp = predict(out.RCRIplus.train, newdata = this_test, type = "response")
-  test_roc_RCRIplus_temp = roc(this_test$died ~ test_prob_RCRIplus_temp, plot = TRUE, print.auc = TRUE)
-  this_df <- data.frame(percent = test_percent_vec[i],
-                        AUC = test_roc_RCRIplus_temp$auc
-                        )
-  ROC_test_size <- rbind(ROC_test_size, this_df)
-  
-}
-
-## Examining discharge outcomes 
-
-#Select retained variables
-out.contrib$max_contrib <- apply(out.contrib %>% select(-var),1,max) 
-retained_vars <- out.contrib %>% filter(max_contrib > 9) %>% select(var)
-
-## Prediction by number of RCRI factors ## --------------------------------------
-dat_sub <- data %>% filter(!is.na(died) #& 
-                           #invasive_mgmt == 0 & 
-                           #sepsis == 0 & 
-                           #PNA == 0  
-                           #Bleed == 0 
-                           )
-
+## Prediction by number of RCRI factors ## ------------------------------------------------------------
+dat_sub <- data %>% filter(!is.na(died))
 pred.test <- predict(out.RCRIplus, 
-                      dat_sub,
-                     type = "response")
+                      newdata = dat_sub,
+                      type = "response")
 
 dat_sub_agg <- dat_sub %>% select(ind, died, NSTEMI, gender, invasive_mgmt, hx_chf, hx_isch_heart, hx_CVA, hx_DM, hx_ckd, high_risk_surgery) %>% 
   mutate_if(is.factor, as.character) %>% 
@@ -448,7 +358,6 @@ dat_sub_agg <- dat_sub %>% select(ind, died, NSTEMI, gender, invasive_mgmt, hx_c
   mutate(prob = pred.test) 
 
 dat_sub_agg[dat_sub_agg$RCRI2 > 4,]$RCRI2 <- 4
-
 
 df <- dat_sub_agg %>% 
   group_by(RCRI2, invasive_mgmt, hx_isch_heart) %>% 
@@ -461,7 +370,7 @@ levels(df$invasive_mgmt)<- c("No invasive management", "Invasive management")
 df$hx_isch_heart = as.factor(df$hx_isch_heart)
 levels(df$hx_isch_heart)<- c("No prior CAD", "Prior CAD")
 
-p_risk <- ggplot(df, aes(x = RCRI, y = med)) +  
+p_risk <- ggplot(df, aes(x = RCRI2, y = med)) +  
   geom_point() + geom_line() + 
   geom_errorbar(aes(ymin = q1, ymax = q2), linetype = 2) + 
   facet_wrap(.~invasive_mgmt + hx_isch_heart, scales = "free_y") +
@@ -474,99 +383,108 @@ if(save_plots){
 }
 
 
-## Analysis of dispo outcome ## ------------------------------------------------------------------------------
+############################################################-------------------------------------------------------------------------------
+## Analysis of disposition to intermediate care facility ## ------------------------------------------------------------------------------
+############################################################-------------------------------------------------------------------------------
+
 data$ICF <- as.numeric(data$ICF==1)
-sub.PCA.dispo <- data[,(colnames(data) %in% c("ICF", "died", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI", unlist(retained_vars)))]
-out.PCA.dispo <- glm(as.numeric(ICF) ~., data = sub.PCA.dispo, family = "binomial")
-#summary(out.PCA)
-#exp(cbind(OR = coef(out.PCA), confint(out.PCA)))
+sub.PCA.dispo <- data[,(colnames(data) %in% c("ICF", "hospid","nis_stratum", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI", "severe_MI", unlist(retained_vars)))]
+dat_full_dispo <- data %>% filter(died == 0) %>% select(c(year, ICF, trendwt, hospid, nis_stratum, var_names_full)) 
+dat_PCA <- data[,(colnames(data) %in% c("hospid", "nis_stratum", "trendwt", "ICF", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT",  "Bleed", "NSTEMI", "severe_MI", "trendwt", unlist(retained_vars)))]
 
-var_names_full <- c(names(X1), names(X2), "cm_mets", "PNA", "sepsis", "Afib", "PE", "DVT", "Bleed", "NSTEMI","invasive_mgmt", "severe_MI")
-data_full_dispo <- data %>% select(c(year, died, ICF, invasive_mgmt, var_names_full)) # %>% select(-c(RCRI_pt, Ischemic_stroke, los, ind, age_factor, `RCRI > 3`))
-out.full.dispo <- glm(ICF ~. + gender*NSTEMI*hx_revasc , data = data_full_dispo, family = "binomial")
+survey_df_full_dispo <- svydesign(ids = ~hospid, strata = ~nis_stratum, weights = ~trendwt, data = dat_full_dispo, nest =T)
 
-out.RCRIplus.dispo <- glm(as.numeric(ICF) ~  age +
-                  gender + 
-                  race + 
-                  year + 
-                  hx_isch_heart +
-                  hx_chf +
-                  hx_CVA + 
-                  hx_DM + 
-                  hx_ckd + 
-                  high_risk_surgery + 
-                  invasive_mgmt +
-                  NSTEMI + 
-                    severe_MI + 
-                    PNA + 
-                    sepsis + 
-                    Afib + 
-                    PE + 
-                    DVT + 
-                    Bleed +
-                    died, 
-                data = data, family = "binomial")
+out.full.dispo <- svyglm(as.numeric(ICF) ~ year + 
+                     age + 
+                     race + 
+                     gender + 
+                     obesity + 
+                     smoking + 
+                     alcoholic + 
+                     HTN + 
+                     HLD + 
+                     hx_DM + 
+                     hx_ckd + 
+                     hx_isch_heart + 
+                     PAD + 
+                     valve_dz + 
+                     hx_chf + 
+                     hx_VTE + 
+                     chrnlung + 
+                     malignancy + 
+                     cm_mets + 
+                     anemia +
+                     hx_CVA + 
+                     Afib + 
+                     sepsis + 
+                     PNA + 
+                     PE + 
+                     DVT + 
+                     Bleed + 
+                     NSTEMI + 
+                     invasive_mgmt + 
+                     high_risk_surgery +
+                     severe_MI,
+                   design = survey_df_full_dispo,
+                   family = "binomial")
 
-model_comp.dispo <- data.frame(model = c("Full", "PCA",  "RCRIPlus"), 
-                         BIC = c(BIC(out.full.dispo), 
-                                 BIC(out.PCA.dispo), 
-                                 BIC(out.RCRIplus.dispo))) %>% 
+out.RCRIplus.dispo <- svyglm(as.numeric(ICF) ~ 
+                         age +
+                         gender + 
+                         race + 
+                         year + 
+                         Afib + 
+                         sepsis +
+                         PNA + 
+                         PE + 
+                         DVT + 
+                         Bleed + 
+                         hx_chf +
+                         hx_DM + 
+                         hx_ckd + 
+                         hx_CVA + 
+                         hx_isch_heart+ 
+                         high_risk_surgery + 
+                         invasive_mgmt +
+                         NSTEMI + 
+                         severe_MI ,
+                       design = survey_df_full_dispo,
+                       family = "binomial")
+
+out.null.dispo <- svyglm(as.numeric(ICF) ~  age +
+                     gender + 
+                     race + 
+                     year + 
+                     Afib + 
+                     sepsis +
+                     PNA + 
+                     PE + 
+                     DVT + 
+                     Bleed + 
+                     invasive_mgmt +
+                     NSTEMI + 
+                     severe_MI +
+                     NSTEMI, 
+                   design = survey_df_full_dispo,
+                   family = "binomial")
+
+model_comp_dispo <- data.frame(model = c("Full", "RCRIPlus", "null"), 
+                         n_par = c(out.full$rank, out.RCRIplus$rank, out.null$rank),
+                         BIC = c(BIC(out.full.dispo, maximal = out.full.dispo)["BIC"], BIC(out.RCRIplus.dispo, maximal = out.RCRIplus.dispo)["BIC"],  BIC(out.null.dispo, maximal = out.null.dispo)["BIC"])) %>% 
   mutate(delta = BIC - min(BIC))
-mod_coefs.dispo <- data.frame(apply(exp(cbind(OR = coef(out.full.dispo), confint(out.full.dispo))),2,round,2))
-names(mod_coefs.dispo)<- c("OR", "2.5% CI", "97.5% CI")
+
+confidence_intervals_dispo =  confint.default(out.full.dispo, adjust = "bonferroni")
+mod_coefs_dispo <- data.frame(apply(exp(cbind(OR = coef(out.full.dispo),confidence_intervals_dispo)),2,round,2))
+names(mod_coefs_dispo)<- c("OR", "2.5% CI", "97.5% CI")
+coef_df_dispo <- data.frame(Var = rownames(mod_coefs_dispo),
+                      OR = paste0(mod_coefs_dispo$OR, " [", mod_coefs_dispo$"2.5% CI", ", ",  mod_coefs_dispo$"97.5% CI", "]"))
 if(output_tables){
-  tab_coefs <- xtable(mod_coefs.dispo)
-  print(tab_coefs, file="dispo_model_coefs.txt")
+  tab_coefs <- xtable(coef_df_dispo)
+  print(tab_coefs, file="dispo_model_coefs.txt", rownames = F)
 }
 
-
-## Testing model out of sample ## -------------------------------------------
-set.seed(123)
-sample <- sample(nrow(data),floor(nrow(data)*0.75))
-train.dispo <- data[sample,]
-test.dispo <- data[-sample,]
-
-library(pROC)
-
-out.RCRIplus.train.dispo <- glm(as.numeric(ICF) ~ age +
-                                  gender + 
-                                  race + 
-                                  year + 
-                                  #smoking + 
-                                  #HLD + 
-                                  Afib + 
-                                  sepsis +
-                                  PNA + 
-                                  PE + 
-                                  DVT + 
-                                  Bleed + 
-                                  hx_isch_heart +
-                                  PAD + 
-                                  hx_chf +
-                                  hx_CVA + 
-                                  hx_DM + 
-                                  hx_ckd + 
-                                  high_risk_surgery + 
-                                  invasive_mgmt +
-                                  NSTEMI + 
-                                  severe_MI +
-                                  died, 
-                                data = train, 
-                                family = "binomial")
-
-out.full.train.dispo <- glm(ICF ~., data = (train %>% select(c(year, died, invasive_mgmt, severe_MI, var_names_full))), family = "binomial")
-
-test_prob_RCRIplus.dispo = predict(out.RCRIplus.train.dispo, newdata = test, type = "response")
-test_roc_RCRIplus.dispo = roc(test$ICF~ test_prob_RCRIplus, plot = TRUE, print.auc = TRUE)
-
-test_prob_full.dispo = predict(out.full.train.dispo, newdata = test, type = "response")
-test_roc_full.dispo = roc(test$ICF ~ test_prob_full.dispo, plot = TRUE, print.auc = TRUE)
-
-p_roc <- ggroc(list(`Full model` = test_roc_full.dispo, `RCRI model` = test_roc_RCRIplus.dispo), linetype = 2) +
-  plot_themes + 
-  labs(color = "Model") + 
-  ggtitle("ROC curves")
-
-if(save_plots){
-  save_plot("ROC_curves_dispo.pdf", p_roc, base_width = 8, base_height = 4)
-}
+## PCA analysis ## ------------------------
+sub.PCA <- data[,(colnames(data) %in% c("died", "year", "race", "gender", "invasive_mgmt", "PNA", "sepsis", "Afib", "PE", "DVT",  "Bleed", "NSTEMI", "severe_MI", "trendwt", unlist(retained_vars)))]
+out.PCA <- glm(as.numeric(died) ~., 
+               data = sub.PCA,
+               family = "binomial")

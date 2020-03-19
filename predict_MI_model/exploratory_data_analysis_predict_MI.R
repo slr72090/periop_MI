@@ -349,7 +349,6 @@ p_cardiac_risk <- ggplot(dfm_dat_cardiac_risk, aes(x = year, y = mean)) +
 
 dfm_dat_ASCVD <- data %>% #select(c(cm_chf, cm_dm, cm_perivasc, cm_htn_c, cm_renlfail, HLD, CAD, prior_PCI, prior_CABG, year)) %>% 
   select(year, hx_isch_heart, PAD, hx_CVA) %>% 
-  mutate(ASCVD = as.numeric(PAD ==1 | hx_isch_heart == 1 | hx_CVA == 1)) %>% 
   melt(., id.vars = "year") %>% 
   drop_na() %>% 
   mutate(value = as.numeric(value)) %>% 
